@@ -1,0 +1,50 @@
+{
+  "properties": [
+    {
+      "name": "resend.api-key",
+      "type": "java.lang.String",
+      "description": "API key used to send transactional email through Resend."
+    },
+    {
+      "name": "resend.base-url",
+      "type": "java.lang.String",
+      "description": "Base URL of the Resend API."
+    },
+    {
+      "name": "resend.from-email",
+      "type": "java.lang.String",
+      "description": "Sender email address for transactional messages."
+    },
+    {
+      "name": "resend.from-name",
+      "type": "java.lang.String",
+      "description": "Sender display name for transactional messages."
+    },
+    {
+      "name": "reset-link.base-url",
+      "type": "java.lang.String",
+      "description": "Frontend URL used for password reset links."
+    },
+    {
+      "name": "reset-link.expiry-minutes",
+      "type": "java.lang.Integer",
+      "description": "Password reset link validity in minutes."
+    },
+    {
+      "name": "app.jwt.secret",
+      "type": "java.lang.String",
+      "description": "Secret key used to sign JWT access tokens."
+    },
+    {
+      "name": "app.jwt.expiration-ms",
+      "type": "java.lang.Long",
+      "description": "Default JWT lifetime in milliseconds."
+    },
+    {
+      "name": "app.jwt.remember-me-expiration-ms",
+      "type": "java.lang.Long",
+      "description": "Remember-me JWT lifetime in milliseconds.",
+      "defaultValue": 604800000
+    }
+  ]
+}
