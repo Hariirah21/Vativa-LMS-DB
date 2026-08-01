@@ -6,6 +6,7 @@ import com.example.lms.service.CourseService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,6 +23,7 @@ public class CourseController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
     public ResponseEntity<ApiResponse<CourseDto.CourseResponse>> createCourse(
             @Valid @RequestPart("course") CourseDto.CourseRequest request,
             @RequestPart(value = "thumbnail", required = false) MultipartFile thumbnail) {
@@ -44,6 +46,7 @@ public class CourseController {
     }
 
     @PutMapping("/{courseId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
     public ResponseEntity<ApiResponse<CourseDto.CourseResponse>> updateCourse(
             @PathVariable Long courseId,
             @Valid @RequestPart("course") CourseDto.CourseRequest request,
@@ -53,6 +56,7 @@ public class CourseController {
     }
 
     @DeleteMapping("/{courseId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
     public ResponseEntity<ApiResponse<Void>> deleteCourse(@PathVariable Long courseId) {
         courseService.deleteCourse(courseId);
         return ResponseEntity.ok(ApiResponse.success("Course deleted successfully."));

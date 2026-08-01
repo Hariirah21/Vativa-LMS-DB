@@ -27,3 +27,21 @@ Optional environment variables and their defaults are documented in
 ```powershell
 .\mvnw.cmd spring-boot:run
 ```
+
+## Run locally without PostgreSQL
+
+The `local` profile is the default and uses a persistent embedded H2 database
+stored under `local-data/`. It is intended only for local development.
+
+```powershell
+mvn.cmd spring-boot:run
+```
+
+## Run with Neon
+
+The Neon launcher contains no password. It prompts for the current database
+password and keeps it only in the backend process environment.
+
+```powershell
+.\run-backend-neon.ps1
+```

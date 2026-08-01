@@ -16,6 +16,9 @@ public class CourseCategoryEntity {
     @Column(nullable = false, unique = true, length = 100)
     private String name;
 
+    @Column(length = 500)
+    private String description;
+
     @Column(name = "active", nullable = false)
     private Boolean active = true;
 }

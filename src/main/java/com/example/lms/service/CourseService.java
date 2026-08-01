@@ -9,6 +9,8 @@ import com.example.lms.repository.CourseCategoryRepository;
 import com.example.lms.repository.CourseRepository;
 import com.example.lms.repository.UserRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -28,8 +30,7 @@ public class CourseService {
     private static final Set<String> ALLOWED_IMAGE_TYPES =
             Set.of("image/jpeg", "image/png");
     private static final long MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
-    private static final int MIN_NAME_WORDS = 3;
-    private static final int MAX_NAME_WORDS = 10;
+    private static final int MAX_NAME_CHARACTERS = 255;
     private static final Path THUMBNAIL_DIRECTORY =
             Path.of("uploads", "course-thumbnails").toAbsolutePath().normalize();
 
@@ -51,7 +52,7 @@ public class CourseService {
             CourseDto.CourseRequest request, MultipartFile thumbnail) {
         String name = validateName(request.getName());
         CourseCategoryEntity category = getActiveCategory(request.getCategoryId());
-        User instructor = getActiveInstructor(request.getInstructorId());
+        User instructor = resolveActiveInstructor(request.getInstructorId());
         String level = validateLevel(request.getLevel());
 
         CourseEntity course = CourseEntity.builder()
@@ -62,12 +63,15 @@ public class CourseService {
                 .description(request.getDescription())
                 .thumbnailUrl(storeThumbnail(thumbnail, null))
                 .build();
-        return toResponse(courseRepository.save(course), category, instructor);
+        return toResponse(courseRepository.saveAndFlush(course), category, instructor);
     }
 
     @Transactional(readOnly = true)
     public List<CourseDto.CourseResponse> getAllCourses() {
-        return courseRepository.findAll().stream().map(this::toResponse).toList();
+        return courseRepository.findAllByOrderByUpdatedAtDesc()
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -79,9 +83,10 @@ public class CourseService {
     public CourseDto.CourseResponse updateCourse(
             Long courseId, CourseDto.CourseRequest request, MultipartFile thumbnail) {
         CourseEntity course = getCourseOrThrow(courseId);
+        assertInstructorOwnsCourse(course);
         String name = validateName(request.getName());
         CourseCategoryEntity category = getActiveCategory(request.getCategoryId());
-        User instructor = getActiveInstructor(request.getInstructorId());
+        User instructor = resolveActiveInstructor(request.getInstructorId());
         String level = validateLevel(request.getLevel());
 
         course.setName(name);
@@ -90,12 +95,14 @@ public class CourseService {
         course.setLevel(level);
         course.setDescription(request.getDescription());
         course.setThumbnailUrl(storeThumbnail(thumbnail, course.getThumbnailUrl()));
-        return toResponse(courseRepository.save(course), category, instructor);
+        return toResponse(courseRepository.saveAndFlush(course), category, instructor);
     }
 
     @Transactional
     public void deleteCourse(Long courseId) {
-        courseRepository.delete(getCourseOrThrow(courseId));
+        CourseEntity course = getCourseOrThrow(courseId);
+        assertInstructorOwnsCourse(course);
+        courseRepository.delete(course);
     }
 
     private CourseEntity getCourseOrThrow(Long courseId) {
@@ -106,29 +113,73 @@ public class CourseService {
 
     private CourseCategoryEntity getActiveCategory(Long categoryId) {
         CourseCategoryEntity category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ApiException("Invalid course category.", HttpStatus.BAD_REQUEST));
+                .orElseThrow(() -> new ApiException(
+                        "Course category not found with id: " + categoryId,
+                        HttpStatus.NOT_FOUND));
         if (!Boolean.TRUE.equals(category.getActive())) {
             throw new ApiException("The selected course category is inactive.", HttpStatus.BAD_REQUEST);
         }
         return category;
     }
 
-    private User getActiveInstructor(Long instructorId) {
-        User instructor = userRepository.findById(instructorId)
-                .orElseThrow(() -> new ApiException("Invalid instructor.", HttpStatus.BAD_REQUEST));
+    private User resolveActiveInstructor(Long requestedInstructorId) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ApiException("Authentication is required.", HttpStatus.UNAUTHORIZED);
+        }
+        boolean signedInAsInstructor = hasRole(authentication, "ROLE_INSTRUCTOR");
+        boolean signedInAsAdmin = hasRole(authentication, "ROLE_ADMIN");
+        if (!signedInAsInstructor && !signedInAsAdmin) {
+            throw new ApiException("Your role cannot manage courses.", HttpStatus.FORBIDDEN);
+        }
+
+        User instructor = signedInAsInstructor
+                ? userRepository.findByEmailIgnoreCase(authentication.getName())
+                    .orElseThrow(() -> new ApiException(
+                            "Logged-in instructor profile not found.",
+                            HttpStatus.NOT_FOUND))
+                : userRepository.findById(requestedInstructorId)
+                .orElseThrow(() -> new ApiException(
+                        "Instructor not found with id: " + requestedInstructorId,
+                        HttpStatus.NOT_FOUND));
         if (!Boolean.TRUE.equals(instructor.getActive())
-                || !"INSTRUCTOR".equalsIgnoreCase(instructor.getRole())) {
+                || instructor.getRole() == null
+                || !"INSTRUCTOR".equalsIgnoreCase(
+                        instructor.getRole().replace("ROLE_", "").trim())) {
             throw new ApiException("The selected user is not an active instructor.", HttpStatus.BAD_REQUEST);
         }
         return instructor;
     }
 
+    private void assertInstructorOwnsCourse(CourseEntity course) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !hasRole(authentication, "ROLE_INSTRUCTOR")) {
+            return;
+        }
+        User current = userRepository.findByEmailIgnoreCase(authentication.getName())
+                .orElseThrow(() -> new ApiException(
+                        "Logged-in instructor profile not found.", HttpStatus.NOT_FOUND));
+        if (!current.getId().equals(course.getInstructorId())) {
+            throw new ApiException(
+                    "Instructors can only modify courses assigned to themselves.",
+                    HttpStatus.FORBIDDEN);
+        }
+    }
+
+    private boolean hasRole(Authentication authentication, String role) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> role.equals(authority.getAuthority()));
+    }
+
     private String validateName(String rawName) {
         String name = rawName == null ? "" : rawName.trim().replaceAll("\\s+", " ");
-        int wordCount = name.isEmpty() ? 0 : name.split("\\s+").length;
-        if (wordCount < MIN_NAME_WORDS || wordCount > MAX_NAME_WORDS) {
+        if (name.isEmpty()) {
+            throw new ApiException("Course Name is required.", HttpStatus.BAD_REQUEST);
+        }
+        if (name.length() > MAX_NAME_CHARACTERS) {
             throw new ApiException(
-                    "Course Name must contain between 3 and 10 words.", HttpStatus.BAD_REQUEST);
+                    "Course Name must not exceed 255 characters.",
+                    HttpStatus.BAD_REQUEST);
         }
         return name;
     }
@@ -179,8 +230,11 @@ public class CourseService {
                 .name(course.getName())
                 .categoryId(course.getCategoryId())
                 .categoryName(category == null ? "" : category.getName())
+                .categoryDescription(category == null ? null : category.getDescription())
+                .categoryActive(category != null && Boolean.TRUE.equals(category.getActive()))
                 .instructorId(course.getInstructorId())
                 .instructorName(instructorName)
+                .instructorEmail(instructor == null ? null : instructor.getEmail())
                 .level(course.getLevel())
                 .description(course.getDescription())
                 .thumbnailUrl(course.getThumbnailUrl())

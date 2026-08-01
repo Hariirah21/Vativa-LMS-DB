@@ -13,6 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -38,7 +40,18 @@ public class LoginController {
                 .lastName(user.getLastName())
                 .email(user.getEmail())
                 .role(user.getRole())
+                .roles(List.of(toAuthority(user.getRole())))
+                .instructorId(isInstructor(user) ? user.getId() : null)
                 .build();
         return ResponseEntity.ok(ApiResponse.success("Profile loaded.", response));
+    }
+
+    private boolean isInstructor(User user) {
+        return "INSTRUCTOR".equalsIgnoreCase(user.getRole().replace("ROLE_", "").trim());
+    }
+
+    private String toAuthority(String role) {
+        String normalized = role.trim().toUpperCase();
+        return normalized.startsWith("ROLE_") ? normalized : "ROLE_" + normalized;
     }
 }

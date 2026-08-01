@@ -22,6 +22,7 @@ public class CourseDto {
     public static class CourseRequest {
 
         @NotBlank(message = "Course Name is required.")
+        @Size(max = 255, message = "Course Name must not exceed 255 characters.")
         private String name;
 
         @NotNull(message = "Course Category is required")
@@ -51,8 +52,11 @@ public class CourseDto {
         private String name;
         private Long categoryId;
         private String categoryName;
+        private String categoryDescription;
+        private Boolean categoryActive;
         private Long instructorId;
         private String instructorName;
+        private String instructorEmail;
         private String level;
         private String description;
         private String thumbnailUrl;

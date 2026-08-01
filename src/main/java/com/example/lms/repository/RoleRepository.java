@@ -10,6 +10,8 @@ public interface RoleRepository extends JpaRepository<RoleEntity, Long> {
 
     boolean existsByNameIgnoreCaseAndCreatedByAdminId(String name, Long createdByAdminId);
 
+    Optional<RoleEntity> findByNameIgnoreCaseAndCreatedByAdminId(String name, Long createdByAdminId);
+
     Optional<RoleEntity> findByIdAndCreatedByAdminId(Long id, Long createdByAdminId);
 
     List<RoleEntity> findAllByCreatedByAdminId(Long createdByAdminId);

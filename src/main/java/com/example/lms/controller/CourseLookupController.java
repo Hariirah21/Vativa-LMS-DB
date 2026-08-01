@@ -5,6 +5,7 @@ import com.example.lms.dto.CourseLookupDto;
 import com.example.lms.repository.CourseCategoryRepository;
 import com.example.lms.repository.UserRepository;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,6 +26,7 @@ public class CourseLookupController {
     }
 
     @GetMapping("/categories")
+    @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
     public ResponseEntity<ApiResponse<List<CourseLookupDto>>> categories() {
         List<CourseLookupDto> data = categoryRepository.findByActiveTrueOrderByNameAsc()
                 .stream()
@@ -34,6 +36,7 @@ public class CourseLookupController {
     }
 
     @GetMapping("/instructors")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<CourseLookupDto>>> instructors() {
         List<CourseLookupDto> data = userRepository
                 .findByRoleIgnoreCaseAndActiveTrueOrderByFirstNameAscLastNameAsc("INSTRUCTOR")
