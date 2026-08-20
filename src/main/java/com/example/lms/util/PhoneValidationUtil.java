@@ -2,6 +2,7 @@ package com.example.lms.util;
 
 import java.util.Map;
 
+
 public final class PhoneValidationUtil {
 
     private static final Map<String, int[]> LENGTH_BY_COUNTRY_CODE = Map.ofEntries(
@@ -30,7 +31,7 @@ public final class PhoneValidationUtil {
         }
         int[] range = LENGTH_BY_COUNTRY_CODE.get(countryCode);
         if (range == null) {
-            return false; // no more silent fallback range - unsupported code is invalid
+            return false; // no silent fallback range - unsupported code is invalid
         }
         int len = phoneNumber.length();
         return len >= range[0] && len <= range[1];

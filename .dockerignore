@@ -1,0 +1,15 @@
+target/
+.git/
+.gitignore
+.mvn/wrapper/maven-wrapper.jar
+*.iml
+.idea/
+.vscode/
+.settings/
+.classpath
+.project
+HELP.md
+README.md
+.env
+application-local.yml
+application-local.properties

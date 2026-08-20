@@ -6,11 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Request / Response payloads for the Sign Up feature (01_US_Sign_Up).
- * Kept as a single file with nested static classes so the "one file per
- * module" rule still holds while both request and response live together.
- */
+
 public class SignUpDto {
 
     @Data
@@ -32,11 +28,11 @@ public class SignUpDto {
         @Size(max = 100, message = "Enter a valid email address.")
         private String email;
 
-     // SRS Field #4 - mandatory. Must be one of the predefined country codes -
-     // that check happens in SignUpService against PhoneValidationUtil's list,
-     // not here. This annotation only guards against a blank/missing value.
-     @NotBlank(message = "Country Code is required")
-     private String countryCode;
+        // SRS Field #4 - mandatory. Must be one of the predefined country codes -
+        // that check happens in SignUpService against PhoneValidationUtil's list,
+        // not here. This annotation only guards against a blank/missing value.
+        @NotBlank(message = "Country Code is required")
+        private String countryCode;
 
         // SRS Field #5 - numeric only, WITHOUT the country code.
         // Exact length is validated against the selected Country Code in

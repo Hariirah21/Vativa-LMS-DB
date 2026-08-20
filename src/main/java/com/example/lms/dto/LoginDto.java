@@ -8,9 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Request / Response payloads for the Login feature (02__US_Login).
- */
+
 public class LoginDto {
 
     @Data

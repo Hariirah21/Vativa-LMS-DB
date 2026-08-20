@@ -1,10 +1,17 @@
 package com.example.lms.entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "roles", uniqueConstraints = @UniqueConstraint(columnNames = {"name", "created_by_admin_id"}))
+@Table(name = "roles", uniqueConstraints = @UniqueConstraint(columnNames = "name"))
+@Getter
+@Setter
+@NoArgsConstructor
 public class RoleEntity {
 
     @Id
@@ -20,12 +27,15 @@ public class RoleEntity {
     @Column(name = "permissions_json", columnDefinition = "TEXT")
     private String permissionsJson;
 
-    // Roles are scoped per-Admin — each Admin only sees/manages their own roles
+    // Audit only — who created the role. Roles themselves are system-wide
+    // (SRS: "Role names must be unique in the system"; the Available Roles
+    // dropdown lists ALL active roles, not just the current admin's roles),
+    // so this is NOT used to scope or restrict queries.
     @Column(name = "created_by_admin_id", nullable = false)
     private Long createdByAdminId;
 
     @Column(nullable = false)
-    private String status = "Active"; // Active / Inactive — SRS: "Available Roles dropdown displays all active roles"
+    private String status = "Active"; // Active / Inactive — SRS: defaults to Active on creation
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -43,25 +53,4 @@ public class RoleEntity {
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
-
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-
-    public String getPermissionsJson() { return permissionsJson; }
-    public void setPermissionsJson(String permissionsJson) { this.permissionsJson = permissionsJson; }
-
-    public Long getCreatedByAdminId() { return createdByAdminId; }
-    public void setCreatedByAdminId(Long createdByAdminId) { this.createdByAdminId = createdByAdminId; }
-
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
 }

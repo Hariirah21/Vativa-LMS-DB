@@ -6,18 +6,13 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Generic response envelope shared by every endpoint (Sign Up, Login,
- * Forgot Password). Kept outside the per-feature DTO files since it is
- * common infrastructure, not feature-specific data.
- */
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ApiResponse<T> {
-
     private boolean success;
     private String message;
     private T data;

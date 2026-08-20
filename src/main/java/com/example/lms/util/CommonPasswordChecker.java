@@ -2,15 +2,7 @@ package com.example.lms.util;
 
 import java.util.Set;
 
-/**
- * Rejects passwords from a small denylist of commonly used passwords,
- * per SRS Sign Up rule: "Password should not be a commonly used password".
- *
- * For production, swap this static set for a proper breached-password
- * list (e.g. Have I Been Pwned range API or a bundled rockyou-style list).
- * This starter set covers the most common patterns so the rule isn't
- * silently unenforced.
- */
+
 public final class CommonPasswordChecker {
 
     private static final Set<String> COMMON_PASSWORDS = Set.of(

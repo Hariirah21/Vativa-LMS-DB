@@ -13,24 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Business logic for 01_US_Sign_Up.
- *
- * Rules enforced here (beyond bean-validation on the DTO):
- *  - Email must not already be registered.
- *  - Password must not equal the Email ID.
- *  - Password must not be a commonly used password.
- *  - Confirm Password must exactly match Password.
- *  - Phone Number length must match the selected Country Code.
- *  - Role is NOT accepted from the client; every new account is stored
- *    with role = "ADMIN" (business rule, not present in the original SRS).
- *
- * Duplicate-submit protection: the existsByEmailIgnoreCase() pre-check
- * handles the common case, but the DB-level unique constraint on email
- * is the real guard against a race between two simultaneous requests
- * with the same email - see GlobalExceptionHandler for how the resulting
- * DataIntegrityViolationException is converted to the SRS error message.
- */
+
 @Service
 @RequiredArgsConstructor
 public class SignUpService {
@@ -53,7 +36,7 @@ public class SignUpService {
                 throw new ApiException("Password should not be a commonly used password.", HttpStatus.BAD_REQUEST);
             }
 
-            // NEW - validate the code itself is one of the predefined ones (SRS Field #4)
+            // Validate the code itself is one of the predefined ones (SRS Field #4)
             if (!PhoneValidationUtil.isSupportedCountryCode(request.getCountryCode())) {
                 throw new ApiException("Country Code is required", HttpStatus.BAD_REQUEST);
             }

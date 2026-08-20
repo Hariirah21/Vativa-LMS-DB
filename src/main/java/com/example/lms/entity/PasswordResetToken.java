@@ -8,18 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * Stores the password reset token issued for the Forgot Password flow
- * (03__US_Forgot_Password), per the SRS reset-link flow.
- *
- * Security note: we never store the raw token. Only its SHA-256 hash is
- * persisted (same principle as password storage) - see TokenGenerator.
- * The raw token only ever exists in the emailed link and briefly in
- * memory on the request that contains it.
- *
- * A fresh row is created every time "Send Reset Link" is requested; any
- * previous unused token for the same email is invalidated first.
- */
+
 @Entity
 @Table(name = "password_reset_token")
 @Data
@@ -47,6 +36,13 @@ public class PasswordResetToken {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    // Optimistic lock so two near-simultaneous "Reset Password" clicks for
+    // the same token can't both slip past the `used == false` check
+    // (SRS Edge Case #6).
+    @Version
+    @Column(name = "version")
+    private Long version;
 
     @PrePersist
     protected void onCreate() {

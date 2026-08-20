@@ -1,26 +1,26 @@
 package com.example.lms.service;
 
 import com.example.lms.exception.ApiException;
+import io.netty.channel.ChannelOption;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.netty.http.client.HttpClient;
+import reactor.util.retry.Retry;
 
+import java.time.Duration;
 import java.util.Map;
 
-/**
- * Thin wrapper around the Resend (https://resend.com) transactional email
- * API. Shared infrastructure used only by ForgotPasswordService right now
- * (to deliver the password reset link).
- *
- * IMPORTANT: `resend.api-key` in application.yml is currently a TEMPORARY
- * placeholder for local development. Swap it for the real key (env var
- * RESEND_API_KEY) once issued - no code changes needed elsewhere.
- */
+
 @Slf4j
 @Service
-public class ResendEmailService {
+public class ResendEmailService implements PasswordResetEmailService {
 
     @Value("${resend.api-key}")
     private String apiKey;
@@ -34,14 +34,43 @@ public class ResendEmailService {
     @Value("${resend.from-name}")
     private String fromName;
 
-    private WebClient webClient() {
-        return WebClient.builder().baseUrl(baseUrl).build();
+    @Value("${resend.timeout-ms:5000}")
+    private long timeoutMs;
+
+    @Value("${resend.max-retries:1}")
+    private int maxRetries;
+
+    private WebClient webClient;
+
+    @PostConstruct
+    void init() {
+        requireNonBlank(apiKey, "resend.api-key");
+        requireNonBlank(baseUrl, "resend.base-url");
+        requireNonBlank(fromEmail, "resend.from-email");
+        requireNonBlank(fromName, "resend.from-name");
+
+        HttpClient httpClient = HttpClient.create()
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) timeoutMs)
+                .responseTimeout(Duration.ofMillis(timeoutMs));
+
+        this.webClient = WebClient.builder()
+                .baseUrl(baseUrl)
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .build();
     }
 
+    private void requireNonBlank(String value, String propertyName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(
+                    "Required configuration property '" + propertyName + "' is missing or blank. " +
+                            "Set it via application.yml or an environment variable before starting the app.");
+        }
+    }
+
+    @Override
     public void sendResetLinkEmail(String toEmail, String resetLink, int expiryMinutes) {
         String subject = "Reset your LMS password";
         String html = buildResetLinkHtml(resetLink, expiryMinutes);
-
         Map<String, Object> payload = Map.of(
                 "from", fromName + " <" + fromEmail + ">",
                 "to", new String[]{toEmail},
@@ -50,19 +79,44 @@ public class ResendEmailService {
         );
 
         try {
-            webClient().post()
+            webClient.post()
                     .uri("")
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .bodyValue(payload)
                     .retrieve()
                     .toBodilessEntity()
-                    .block();
+                    .retryWhen(Retry.backoff(maxRetries, Duration.ofMillis(300))
+                            .filter(this::isRetryable))
+                    .block(Duration.ofMillis(timeoutMs * (maxRetries + 1)));
         } catch (Exception e) {
-            log.error("Resend email dispatch failed for {}: {}", toEmail, e.getMessage());
+            log.error("Resend email dispatch failed for {}: {}", maskEmail(toEmail), e.getMessage());
             throw new ApiException("Unable to process the request. Please try again later.",
                     HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    /** Retry on network-level failures and 5xx; never on 4xx (bad key, bad payload won't fix itself). */
+    private boolean isRetryable(Throwable throwable) {
+        if (throwable instanceof WebClientRequestException) {
+            return true; // connection refused, DNS failure, timeout, etc.
+        }
+        if (throwable instanceof WebClientResponseException responseException) {
+            return responseException.getStatusCode().is5xxServerError();
+        }
+        return false;
+    }
+
+    /** j***@example.com style masking - enough for correlating log lines without exposing the full address. */
+    private String maskEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return "[unknown]";
+        }
+        int at = email.indexOf('@');
+        if (at <= 1) {
+            return "***" + email.substring(Math.max(at, 0));
+        }
+        return email.charAt(0) + "***" + email.substring(at);
     }
 
     private String buildResetLinkHtml(String resetLink, int expiryMinutes) {

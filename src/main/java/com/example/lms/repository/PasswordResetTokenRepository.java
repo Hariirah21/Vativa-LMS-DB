@@ -2,7 +2,10 @@ package com.example.lms.repository;
 
 import com.example.lms.entity.PasswordResetToken;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface PasswordResetTokenRepository extends JpaRepository<PasswordResetToken, Long> {
@@ -10,4 +13,9 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
     Optional<PasswordResetToken> findByTokenHash(String tokenHash);
 
     void deleteByEmailIgnoreCase(String email);
+
+    
+    @Modifying
+    @Query("delete from PasswordResetToken t where t.expiryTime < :cutoff or t.used = true")
+    int deleteExpiredOrUsedTokens(LocalDateTime cutoff);
 }

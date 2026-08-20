@@ -8,14 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * Represents a registered LMS user.
- *
- * Business rule (confirmed by product owner, not present in the original
- * SRS document): every account created through Sign Up is stored with
- * role = "ADMIN". This is enforced in SignUpService, never taken from
- * client input.
- */
+
 @Entity
 @Table(name = "users", uniqueConstraints = {
         @UniqueConstraint(columnNames = "email")
@@ -59,6 +52,25 @@ public class User {
     @Builder.Default
     private Boolean active = true;
 
+    // NEW - brute-force protection (OWASP ASVS 2.2.1). Reset to 0 on every
+    // successful login. Never exposed in any DTO/response.
+    //
+    // FIXED: originally just `nullable = false` with no DB default. On a
+    // table that already has rows, Hibernate's generated
+    // `ALTER TABLE users ADD COLUMN failed_login_attempts integer NOT NULL`
+    // fails in Postgres because existing rows have nothing to put in the
+    // new NOT NULL column. columnDefinition adds an explicit DEFAULT 0 so
+    // Postgres backfills existing rows automatically during the ALTER.
+    @Column(name = "failed_login_attempts", nullable = false,
+            columnDefinition = "integer not null default 0")
+    @Builder.Default
+    private Integer failedLoginAttempts = 0;
+
+    // NEW - set to "now + lockout duration" once failedLoginAttempts hits
+    // the configured threshold; cleared on successful login. Null = not locked.
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -72,10 +84,18 @@ public class User {
         if (this.role == null) {
             this.role = "ADMIN";
         }
+        if (this.failedLoginAttempts == null) {
+            this.failedLoginAttempts = 0;
+        }
     }
 
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    @Transient
+    public boolean isLocked() {
+        return lockedUntil != null && LocalDateTime.now().isBefore(lockedUntil);
     }
 }
