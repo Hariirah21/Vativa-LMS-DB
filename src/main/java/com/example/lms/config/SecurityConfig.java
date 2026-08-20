@@ -34,12 +34,12 @@ public class SecurityConfig {
     // FIXED: was @Value("${app.cors.allowed-origins}") with no default,
     // which is a REQUIRED placeholder - Spring refuses to start the whole
     // context if it's not set anywhere in your config (this is exactly
-    // what crashed securityConfig bean creation). A localhost default is
-    // safe to ship (it's not a secret, unlike app.jwt.secret which
+    // what crashed securityConfig bean creation). A localhost + prod-frontend
+    // default is safe to ship (it's not a secret, unlike app.jwt.secret which
     // deliberately has no default) - override it via
     // app.cors.allowed-origins in application.yml/properties or the
-    // CORS_ALLOWED_ORIGINS env var for staging/prod.
-    @Value("${app.cors.allowed-origins:http://localhost:4200}")
+    // APP_CORS_ALLOWED_ORIGINS env var (comma-separated) for staging/prod.
+    @Value("${app.cors.allowed-origins:http://localhost:4200,https://vativa-lms.netlify.app}")
     private List<String> allowedOrigins;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
