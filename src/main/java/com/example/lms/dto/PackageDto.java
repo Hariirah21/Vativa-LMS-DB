@@ -1,8 +1,10 @@
 package com.example.lms.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
@@ -62,8 +64,23 @@ public class PackageDto {
 
         // Admin Permission page - at least one Create/Read/Update/Delete
         // toggle must be enabled somewhere before Save Package is allowed.
-        @NotNull(message = "Please configure the required permissions before saving")
+        // @NotEmpty (not just @NotNull) so an explicitly-empty array is
+        // rejected with a field-level error instead of falling through to
+        // the cross-field @AssertTrue below with a less specific message.
+        @NotEmpty(message = "Please configure the required permissions before saving")
+        @Valid
         private List<Category> permissions;
+
+        /**
+         * Doc07 Edge Case #6 concurrency guard at the application level (in
+         * addition to the DB-level @Version check on the entity). Client
+         * echoes back the version it last read via GET; on update this is
+         * compared against the current DB row before any write is attempted,
+         * so we can return the exact SRS wording ("the package has already
+         * been modified") rather than a generic JPA optimistic-lock error.
+         * Null/ignored on create.
+         */
+        private Long version;
 
         // Custom cross-field rule: SRS Field #12 caps description at 500 words.
         // Runs only when a description was actually entered (field is optional).
@@ -107,15 +124,21 @@ public class PackageDto {
         private String status;
         private LocalDateTime createdAt;
         private List<Category> permissions;
+        private Long version;
     }
 
     // Matches screenshot: Authentication, Course Management, Content Management, Enrollment...
     @Data
     @NoArgsConstructor
     public static class Category {
+
+        @NotBlank(message = "Please select a package")
         private String id;
+
         private String name;
         private boolean enabled;
+
+        @Valid
         private List<Feature> features;
     }
 
@@ -123,7 +146,10 @@ public class PackageDto {
     @Data
     @NoArgsConstructor
     public static class Feature {
+
+        @NotBlank(message = "Please select a package")
         private String id;
+
         private String name;
         private Permission permissions;
     }
@@ -136,5 +162,20 @@ public class PackageDto {
         private boolean read;
         private boolean update;
         private boolean delete;
+    }
+
+    /**
+     * Response shape for GET /api/packages/features - the predefined feature
+     * catalog the Admin Permission matrix (Doc07 Field #1) is built from.
+     * Reuses Category/Feature so the frontend can seed the same matrix
+     * structure it POSTs back in Request.permissions.
+     */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class FeatureCatalogEntry {
+        private String categoryId;
+        private String categoryName;
+        private List<Feature> features;
     }
 }

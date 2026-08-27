@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-
 @Entity
 @Table(name = "users", uniqueConstraints = {
         @UniqueConstraint(columnNames = "email")
@@ -52,15 +51,18 @@ public class User {
     @Builder.Default
     private Boolean active = true;
 
-    // NEW - brute-force protection (OWASP ASVS 2.2.1). Reset to 0 on every
-    // successful login. Never exposed in any DTO/response.
-    //
-    // FIXED: originally just `nullable = false` with no DB default. On a
-    // table that already has rows, Hibernate's generated
-    // `ALTER TABLE users ADD COLUMN failed_login_attempts integer NOT NULL`
-    // fails in Postgres because existing rows have nothing to put in the
-    // new NOT NULL column. columnDefinition adds an explicit DEFAULT 0 so
-    // Postgres backfills existing rows automatically during the ALTER.
+    
+    @Column(name = "package_id")
+    private Long packageId;
+
+    
+    @Column(name = "package_assigned_at")
+    private LocalDateTime packageAssignedAt;
+
+    @Column(name = "package_expires_at")
+    private LocalDateTime packageExpiresAt;
+
+    
     @Column(name = "failed_login_attempts", nullable = false,
             columnDefinition = "integer not null default 0")
     @Builder.Default
@@ -97,5 +99,13 @@ public class User {
     @Transient
     public boolean isLocked() {
         return lockedUntil != null && LocalDateTime.now().isBefore(lockedUntil);
+    }
+
+    // NEW - convenience check used by permission-gating logic: a package
+    // with no expiry (packageExpiresAt == null) never counts as expired;
+    // otherwise it's expired once "now" passes that timestamp.
+    @Transient
+    public boolean isPackageExpired() {
+        return packageExpiresAt != null && LocalDateTime.now().isAfter(packageExpiresAt);
     }
 }

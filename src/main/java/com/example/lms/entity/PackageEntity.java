@@ -7,8 +7,15 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
+
 @Entity
-@Table(name = "packages")
+@Table(
+        name = "packages",
+        indexes = {
+                @Index(name = "idx_packages_name", columnList = "name"),
+                @Index(name = "idx_packages_status", columnList = "status")
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -51,6 +58,11 @@ public class PackageEntity {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    
+    @Version
+    @Column(nullable = false)
+    private Long version = 0L;
 
     @PrePersist
     protected void onCreate() {
