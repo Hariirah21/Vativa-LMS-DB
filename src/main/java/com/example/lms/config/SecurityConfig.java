@@ -73,9 +73,7 @@ public class SecurityConfig {
                                             RateLimitingFilter rateLimitingFilter) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                // Stateless JWT-in-header auth (no cookies used for auth), so CSRF
-                // tokens don't apply here - disabling is correct for this design,
-                // not a shortcut. See: OWASP CSRF cheat sheet, "token-based auth".
+                
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .headers(headers -> headers
@@ -90,6 +88,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exceptions -> exceptions
