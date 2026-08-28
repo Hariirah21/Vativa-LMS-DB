@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Runtime question-import storage
+data/
+
+# Local Codex document-review intermediates
+.codex-doc-review*/
+doc_review.ps1

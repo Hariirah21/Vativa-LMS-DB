@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -25,6 +26,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -44,6 +46,11 @@ public class SecurityConfig {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+        @Bean
+        public ObjectMapper objectMapper() {
+                return objectMapper;
+        }
+
     // Required by SignUpService / LoginService (constructor-injected) to
     // hash and verify passwords with BCrypt.
     @Bean
@@ -58,7 +65,8 @@ public class SecurityConfig {
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         // Explicit header allow-list instead of "*", since allowCredentials(true)
         // + a wildcard header list is an easy-to-miss loose combination.
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
+        configuration.setAllowedHeaders(List.of(
+                "Authorization", "Content-Type", "Accept", "Idempotency-Key"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 
