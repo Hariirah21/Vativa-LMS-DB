@@ -14,8 +14,8 @@ public class PackageEntity {
     @Column(nullable = false, unique = true)
     private String name;
 
-    @Column(name = "available_package", nullable = false, length = 20, columnDefinition = "varchar(20) default 'AVAILABLE'")
-    private String availablePackage = "AVAILABLE";
+    @Column(name = "available_package", nullable = false, length = 20, columnDefinition = "varchar(20) default 'Basic'")
+    private String availablePackage = "Basic";
 
     @Column(columnDefinition = "TEXT")
     private String description;

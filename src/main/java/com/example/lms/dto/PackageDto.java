@@ -15,8 +15,9 @@ public class PackageDto {
         @NotBlank(message = "Package Name is required")
         private String name;
 
-        @NotBlank(message = "Please select package availability")
-        @Pattern(regexp = "AVAILABLE|UNAVAILABLE", message = "Package availability must be AVAILABLE or UNAVAILABLE")
+        @NotBlank(message = "Please select a package")
+        @Pattern(regexp = "Basic|Standard|Premium|Existing",
+                message = "Package must be Basic, Standard, Premium, or Existing")
         private String availablePackage;
 
         private String description;

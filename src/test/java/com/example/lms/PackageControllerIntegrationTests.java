@@ -33,30 +33,39 @@ class PackageControllerIntegrationTests {
     }
 
     @Test
-    void superAdminCreatesAndReadsPackageWithAvailability() throws Exception {
+    void superAdminCreatesAndReadsPackageWithFrontendContract() throws Exception {
         mockMvc.perform(post("/api/packages")
                         .with(user("superadmin@example.com").roles("SUPER_ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody("AVAILABLE")))
+                        .content(requestBody("Premium")))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.name").value("Professional"))
-                .andExpect(jsonPath("$.availablePackage").value("AVAILABLE"));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.name").value("Professional"))
+                .andExpect(jsonPath("$.data.availablePackage").value("Premium"))
+                .andExpect(jsonPath("$.data.description").value("Professional package"))
+                .andExpect(jsonPath("$.data.price").value(499.0))
+                .andExpect(jsonPath("$.data.billingCycle").value("Monthly"))
+                .andExpect(jsonPath("$.data.userLimit").value(25))
+                .andExpect(jsonPath("$.data.storageLimit").value(100))
+                .andExpect(jsonPath("$.data.permissions").isArray());
 
         mockMvc.perform(get("/api/packages")
                         .with(user("superadmin@example.com").roles("SUPER_ADMIN")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].availablePackage").value("AVAILABLE"));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].availablePackage").value("Premium"))
+                .andExpect(jsonPath("$.data[0].permissions").isArray());
     }
 
     @Test
-    void unsupportedAvailabilityIsRejected() throws Exception {
+    void unsupportedFrontendPackageOptionIsRejected() throws Exception {
         mockMvc.perform(post("/api/packages")
                         .with(user("superadmin@example.com").roles("SUPER_ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody("SOMETIMES")))
+                        .content(requestBody("AVAILABLE")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.data.availablePackage")
-                        .value("Package availability must be AVAILABLE or UNAVAILABLE"));
+                        .value("Package must be Basic, Standard, Premium, or Existing"));
     }
 
     private String requestBody(String availability) {
@@ -69,7 +78,25 @@ class PackageControllerIntegrationTests {
                   "billingCycle": "Monthly",
                   "userLimit": 25,
                   "storageLimit": 100,
-                  "permissions": []
+                  "permissions": [
+                    {
+                      "id": "course-management",
+                      "name": "Course Management",
+                      "enabled": true,
+                      "features": [
+                        {
+                          "id": "create-course",
+                          "name": "Create Course",
+                          "permissions": {
+                            "create": true,
+                            "read": true,
+                            "update": false,
+                            "delete": false
+                          }
+                        }
+                      ]
+                    }
+                  ]
                 }
                 """.formatted(availability);
     }
