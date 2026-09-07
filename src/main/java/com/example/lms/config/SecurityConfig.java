@@ -14,6 +14,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.MediaType;
 
 @Configuration
 @EnableWebSecurity
@@ -39,16 +40,46 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/me").authenticated()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
+                        .requestMatchers("/images/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/courses/*/enrollments",
+                                "/api/courses/*/enrollments/**")
+                                .hasAnyRole("ADMIN", "SUPER_ADMIN", "INSTRUCTOR")
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/courses",
+                                "/api/courses/**")
+                                .hasAnyRole("ADMIN", "SUPER_ADMIN", "INSTRUCTOR")
+                        .requestMatchers(HttpMethod.PUT, "/api/courses/**")
+                                .hasAnyRole("ADMIN", "SUPER_ADMIN", "INSTRUCTOR")
+                        .requestMatchers(HttpMethod.PATCH, "/api/courses/**")
+                                .hasAnyRole("ADMIN", "SUPER_ADMIN", "INSTRUCTOR")
+                        .requestMatchers(HttpMethod.DELETE, "/api/courses/**")
+                                .hasAnyRole("ADMIN", "SUPER_ADMIN", "INSTRUCTOR")
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/courses",
+                                "/api/courses/**")
+                                .authenticated()
                         .anyRequest().authenticated()
                 )
                 .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable())
                 .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint((request, response, exception) ->
-                                response.sendError(HttpServletResponse.SC_UNAUTHORIZED))
-                        .accessDeniedHandler((request, response, exception) ->
-                                response.sendError(HttpServletResponse.SC_FORBIDDEN)))
+                        .authenticationEntryPoint((request, response, exception) -> {
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            response.getWriter().write(
+                                    "{\"success\":false,\"message\":\"Authentication is required.\"}");
+                        })
+                        .accessDeniedHandler((request, response, exception) -> {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            response.getWriter().write(
+                                    "{\"success\":false,\"message\":\"You are not authorized to perform this action.\"}");
+                        }))
                 // Wires JwtAuthenticationFilter into the chain - without this,
                 // JwtUtil is never invoked on incoming requests and every
                 // protected endpoint 401s even with a valid token.

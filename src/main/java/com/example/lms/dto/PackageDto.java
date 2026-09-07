@@ -2,6 +2,7 @@ package com.example.lms.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 
 import java.time.LocalDateTime;
@@ -13,6 +14,10 @@ public class PackageDto {
 
         @NotBlank(message = "Package Name is required")
         private String name;
+
+        @NotBlank(message = "Please select package availability")
+        @Pattern(regexp = "AVAILABLE|UNAVAILABLE", message = "Package availability must be AVAILABLE or UNAVAILABLE")
+        private String availablePackage;
 
         private String description;
 
@@ -36,6 +41,9 @@ public class PackageDto {
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
 
+        public String getAvailablePackage() { return availablePackage; }
+        public void setAvailablePackage(String availablePackage) { this.availablePackage = availablePackage; }
+
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
 
@@ -58,6 +66,7 @@ public class PackageDto {
     public static class Response {
         private Long id;
         private String name;
+        private String availablePackage;
         private String description;
         private Double price;
         private String billingCycle;
@@ -74,6 +83,9 @@ public class PackageDto {
 
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
+
+        public String getAvailablePackage() { return availablePackage; }
+        public void setAvailablePackage(String availablePackage) { this.availablePackage = availablePackage; }
 
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }

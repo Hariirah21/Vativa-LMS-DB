@@ -1,5 +1,6 @@
 package com.example.lms.controller;
 
+import com.example.lms.dto.ApiResponse;
 import com.example.lms.dto.StaffDto;
 import com.example.lms.service.StaffService;
 import jakarta.validation.Valid;
@@ -20,7 +21,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/staff")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
 public class StaffController {
 
     private final StaffService staffService;
@@ -30,43 +31,51 @@ public class StaffController {
     }
 
     @GetMapping
-    public ResponseEntity<List<StaffDto.Response>> list(Authentication authentication) {
-        return ResponseEntity.ok(staffService.list(authentication.getName()));
+    public ResponseEntity<ApiResponse<List<StaffDto.Response>>> list(
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Staff fetched successfully.", staffService.list(authentication.getName())));
     }
 
     @PostMapping
-    public ResponseEntity<StaffDto.Response> create(
+    public ResponseEntity<ApiResponse<StaffDto.Response>> create(
             Authentication authentication,
             @Valid @RequestBody StaffDto.Request request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(staffService.create(authentication.getName(), request));
+                .body(ApiResponse.success(
+                        "Staff created successfully.",
+                        staffService.create(authentication.getName(), request)));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<StaffDto.Response> update(
+    public ResponseEntity<ApiResponse<StaffDto.Response>> update(
             Authentication authentication,
             @PathVariable Long id,
             @Valid @RequestBody StaffDto.Request request
     ) {
-        return ResponseEntity.ok(staffService.update(authentication.getName(), id, request));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Staff updated successfully.",
+                staffService.update(authentication.getName(), id, request)));
     }
 
     @PostMapping("/invitations")
-    public ResponseEntity<StaffDto.Response> invite(
+    public ResponseEntity<ApiResponse<StaffDto.Response>> invite(
             Authentication authentication,
             @Valid @RequestBody StaffDto.InvitationRequest request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(staffService.invite(authentication.getName(), request));
+                .body(ApiResponse.success(
+                        "Staff invitation created successfully.",
+                        staffService.invite(authentication.getName(), request)));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(
+    public ResponseEntity<ApiResponse<Void>> delete(
             Authentication authentication,
             @PathVariable Long id
     ) {
         staffService.delete(authentication.getName(), id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(ApiResponse.success("Staff deleted successfully."));
     }
 }

@@ -132,12 +132,23 @@ public class StaffService {
                         HttpStatus.UNAUTHORIZED));
         if (!Boolean.TRUE.equals(user.getActive())
                 || user.getRole() == null
-                || !"ADMIN".equalsIgnoreCase(user.getRole().trim())) {
+                || !isAdministratorRole(user.getRole())) {
             throw new ApiException(
                     "Only administrators can manage users and roles.",
                     HttpStatus.FORBIDDEN);
         }
         return user;
+    }
+
+    private boolean isAdministratorRole(String role) {
+        if (role == null) {
+            return false;
+        }
+        String normalized = role.trim().toUpperCase();
+        return "ADMIN".equals(normalized)
+                || "ROLE_ADMIN".equals(normalized)
+                || "SUPER_ADMIN".equals(normalized)
+                || "ROLE_SUPER_ADMIN".equals(normalized);
     }
 
     private User requireRegisteredUser(String rawEmail) {

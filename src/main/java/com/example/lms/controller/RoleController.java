@@ -1,5 +1,6 @@
 package com.example.lms.controller;
 
+import com.example.lms.dto.ApiResponse;
 import com.example.lms.dto.RoleDto;
 import com.example.lms.entity.User;
 import com.example.lms.exception.ApiException;
@@ -16,7 +17,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/roles")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
 public class RoleController {
 
     private final RoleService roleService;
@@ -28,57 +29,69 @@ public class RoleController {
     }
 
     @PostMapping
-    public ResponseEntity<RoleDto.Response> create(
+    public ResponseEntity<ApiResponse<RoleDto.Response>> create(
             Authentication authentication,
             @Valid @RequestBody RoleDto.Request request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(roleService.createRole(adminId(authentication), request));
+                .body(ApiResponse.success(
+                        "Role created successfully.",
+                        roleService.createRole(adminId(authentication), request)));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<RoleDto.Response> update(
+    public ResponseEntity<ApiResponse<RoleDto.Response>> update(
             Authentication authentication,
             @PathVariable Long id,
             @Valid @RequestBody RoleDto.Request request) {
-        return ResponseEntity.ok(roleService.updateRole(adminId(authentication), id, request));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Role updated successfully.",
+                roleService.updateRole(adminId(authentication), id, request)));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<RoleDto.Response> getById(
+    public ResponseEntity<ApiResponse<RoleDto.Response>> getById(
             Authentication authentication,
             @PathVariable Long id) {
-        return ResponseEntity.ok(roleService.getRoleById(adminId(authentication), id));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Role fetched successfully.",
+                roleService.getRoleById(adminId(authentication), id)));
     }
 
     // Full list — Role Management / Admin list screen (all statuses)
     @GetMapping
-    public ResponseEntity<List<RoleDto.Response>> getAll(
+    public ResponseEntity<ApiResponse<List<RoleDto.Response>>> getAll(
             Authentication authentication) {
-        return ResponseEntity.ok(roleService.getAllRoles(adminId(authentication)));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Roles fetched successfully.",
+                roleService.getAllRoles(adminId(authentication))));
     }
 
     // SRS: "Available Roles dropdown displays all active roles"
     @GetMapping("/active")
-    public ResponseEntity<List<RoleDto.Response>> getActive(
+    public ResponseEntity<ApiResponse<List<RoleDto.Response>>> getActive(
             Authentication authentication) {
-        return ResponseEntity.ok(roleService.getActiveRoles(adminId(authentication)));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Active roles fetched successfully.",
+                roleService.getActiveRoles(adminId(authentication))));
     }
 
     @PatchMapping("/{id}/status")
-    public ResponseEntity<RoleDto.Response> updateStatus(
+    public ResponseEntity<ApiResponse<RoleDto.Response>> updateStatus(
             Authentication authentication,
             @PathVariable Long id,
             @Valid @RequestBody RoleDto.StatusUpdateRequest request) {
-        return ResponseEntity.ok(roleService.updateStatus(
-                adminId(authentication), id, request.getStatus()));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Role status updated successfully.",
+                roleService.updateStatus(
+                        adminId(authentication), id, request.getStatus())));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(
+    public ResponseEntity<ApiResponse<Void>> delete(
             Authentication authentication,
             @PathVariable Long id) {
         roleService.deleteRole(adminId(authentication), id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(ApiResponse.success("Role deleted successfully."));
     }
 
     private Long adminId(Authentication authentication) {
@@ -88,11 +101,22 @@ public class RoleController {
                         HttpStatus.UNAUTHORIZED));
         if (!Boolean.TRUE.equals(admin.getActive())
                 || admin.getRole() == null
-                || !"ADMIN".equalsIgnoreCase(admin.getRole().trim())) {
+                || !isAdministratorRole(admin.getRole())) {
             throw new ApiException(
                     "Only administrators can manage roles.",
                     HttpStatus.FORBIDDEN);
         }
         return admin.getId();
+    }
+
+    private boolean isAdministratorRole(String role) {
+        if (role == null) {
+            return false;
+        }
+        String normalized = role.trim().toUpperCase();
+        return "ADMIN".equals(normalized)
+                || "ROLE_ADMIN".equals(normalized)
+                || "SUPER_ADMIN".equals(normalized)
+                || "ROLE_SUPER_ADMIN".equals(normalized);
     }
 }

@@ -42,7 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String email = jwtUtil.extractEmail(token);
                 String role = jwtUtil.extractRole(token);
 
-                String normalizedRole = role.trim().toUpperCase();
+                String normalizedRole = normalizeRole(role);
                 String authority = normalizedRole.startsWith("ROLE_")
                         ? normalizedRole : "ROLE_" + normalizedRole;
                 var authorities = List.of(
@@ -54,5 +54,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private String normalizeRole(String role) {
+        if (role == null) {
+            return "";
+        }
+        String normalized = role.trim().toUpperCase();
+        if ("SUPERADMIN".equals(normalized) || "ROLE_SUPERADMIN".equals(normalized)) {
+            return "SUPER_ADMIN";
+        }
+        return normalized;
     }
 }

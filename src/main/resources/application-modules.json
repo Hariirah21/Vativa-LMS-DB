@@ -1,0 +1,75 @@
+[
+  {
+    "id": "authentication",
+    "name": "Authentication",
+    "enabled": true,
+    "features": [
+      {
+        "id": "user-authentication-access",
+        "name": "User Authentication & Access",
+        "permissions": { "create": true, "read": true, "update": true, "delete": true }
+      }
+    ]
+  },
+  {
+    "id": "course-management",
+    "name": "Course Management",
+    "enabled": true,
+    "features": [
+      {
+        "id": "create-course",
+        "name": "Create Course",
+        "permissions": { "create": true, "read": true, "update": true, "delete": true }
+      },
+      {
+        "id": "course-list",
+        "name": "Course List",
+        "permissions": { "create": true, "read": true, "update": true, "delete": true }
+      },
+      {
+        "id": "organize-course-modules",
+        "name": "Organize Modules",
+        "permissions": { "create": true, "read": true, "update": true, "delete": true }
+      }
+    ]
+  },
+  {
+    "id": "content-management",
+    "name": "Content Management",
+    "enabled": true,
+    "features": [
+      {
+        "id": "multimedia",
+        "name": "Multimedia",
+        "permissions": { "create": true, "read": true, "update": true, "delete": true }
+      },
+      {
+        "id": "ebook",
+        "name": "Ebook",
+        "permissions": { "create": true, "read": true, "update": true, "delete": true }
+      },
+      {
+        "id": "organize-content-modules",
+        "name": "Organize Modules",
+        "permissions": { "create": true, "read": true, "update": true, "delete": true }
+      }
+    ]
+  },
+  {
+    "id": "enrollment",
+    "name": "Enrollment",
+    "enabled": true,
+    "features": [
+      {
+        "id": "enroll-unroll",
+        "name": "Enroll/Unroll in Course",
+        "permissions": { "create": true, "read": true, "update": true, "delete": true }
+      },
+      {
+        "id": "enrolled-course-list",
+        "name": "Enrolled Course List",
+        "permissions": { "create": true, "read": true, "update": true, "delete": true }
+      }
+    ]
+  }
+]

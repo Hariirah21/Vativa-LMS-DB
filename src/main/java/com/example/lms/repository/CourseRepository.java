@@ -7,4 +7,8 @@ import java.util.List;
 
 public interface CourseRepository extends JpaRepository<CourseEntity, Long> {
     List<CourseEntity> findAllByOrderByUpdatedAtDesc();
+
+    boolean existsByNameIgnoreCase(String name);
+
+    boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
 }

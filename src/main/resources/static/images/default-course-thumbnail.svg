@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title description">
+  <title id="title">Default course thumbnail</title>
+  <desc id="description">An open book on a blue and purple background.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#173B6C"/>
+      <stop offset="1" stop-color="#6D4ACB"/>
+    </linearGradient>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#DDE8FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" rx="32" fill="url(#background)"/>
+  <circle cx="1110" cy="110" r="190" fill="#FFFFFF" opacity="0.07"/>
+  <circle cx="150" cy="650" r="250" fill="#58C7E8" opacity="0.09"/>
+  <g transform="translate(390 175)">
+    <path d="M250 85C180 35 88 32 30 58v330c66-28 158-19 220 35V85Z" fill="url(#page)"/>
+    <path d="M250 85c70-50 162-53 220-27v330c-66-28-158-19-220 35V85Z" fill="url(#page)"/>
+    <path d="M250 85v338" stroke="#A7BCE8" stroke-width="12" stroke-linecap="round"/>
+    <path d="M75 135c48-13 96-8 133 13M75 195c48-13 96-8 133 13M292 148c37-21 85-26 133-13M292 208c37-21 85-26 133-13" fill="none" stroke="#7894CA" stroke-width="12" stroke-linecap="round"/>
+  </g>
+  <text x="640" y="650" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="48" font-weight="700" text-anchor="middle" letter-spacing="3">COURSE</text>
+</svg>

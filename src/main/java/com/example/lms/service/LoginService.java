@@ -1,14 +1,17 @@
 package com.example.lms.service;
 
 import com.example.lms.dto.LoginDto;
+import com.example.lms.entity.LoginActivityEntity;
 import com.example.lms.entity.User;
 import com.example.lms.exception.ApiException;
+import com.example.lms.repository.LoginActivityRepository;
 import com.example.lms.repository.UserRepository;
 import com.example.lms.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Business logic for 02__US_Login.
@@ -28,10 +31,13 @@ public class LoginService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final LoginActivityRepository loginActivityRepository;
 
+    @Transactional
     public LoginDto.LoginResponse login(LoginDto.LoginRequest request) {
         try {
-            User user = userRepository.findByEmailIgnoreCase(request.getEmail())
+            String email = request.getEmail().trim();
+            User user = userRepository.findByEmailIgnoreCase(email)
                     .orElseThrow(() -> new ApiException("Invalid Email ID or Password.", HttpStatus.UNAUTHORIZED));
 
             if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
@@ -43,7 +49,13 @@ public class LoginService {
             }
 
             boolean rememberMe = Boolean.TRUE.equals(request.getRememberMe());
-            String token = jwtUtil.generateToken(user.getEmail(), user.getId(), user.getRole(), rememberMe);
+            String role = normalizeRole(user.getRole());
+            String token = jwtUtil.generateToken(user.getEmail(), user.getId(), role, rememberMe);
+
+            loginActivityRepository.save(LoginActivityEntity.builder()
+                    .userId(user.getId())
+                    .expiresAt(jwtUtil.extractExpirationDateTime(token))
+                    .build());
 
             return LoginDto.LoginResponse.builder()
                     .token(token)
@@ -52,7 +64,7 @@ public class LoginService {
                     .firstName(user.getFirstName())
                     .lastName(user.getLastName())
                     .email(user.getEmail())
-                    .role(user.getRole())
+                    .role(role)
                     .build();
 
         } catch (ApiException e) {
@@ -62,5 +74,16 @@ public class LoginService {
             throw new ApiException("Unable to log in. Please try again later.",
                     HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private String normalizeRole(String role) {
+        if (role == null) {
+            return null;
+        }
+        String normalized = role.trim().toUpperCase();
+        if ("SUPERADMIN".equals(normalized) || "ROLE_SUPERADMIN".equals(normalized)) {
+            return "SUPER_ADMIN";
+        }
+        return normalized.startsWith("ROLE_") ? normalized.substring(5) : normalized;
     }
 }

@@ -7,32 +7,43 @@ import com.example.lms.repository.RoleRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpStatus;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
 public class RoleService {
 
     private final RoleRepository roleRepository;
+    private final List<String> acceptedRoleNames;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public RoleService(RoleRepository roleRepository) {
+    public RoleService(
+            RoleRepository roleRepository,
+            @Value("${app.roles.accepted}") List<String> acceptedRoleNames) {
         this.roleRepository = roleRepository;
+        this.acceptedRoleNames = acceptedRoleNames.stream()
+                .map(String::trim)
+                .filter(name -> !name.isEmpty())
+                .distinct()
+                .toList();
     }
 
     @Transactional
     public RoleDto.Response createRole(Long adminId, RoleDto.Request request) {
         String name = request.getName().trim();
         validatePermissions(request);
-        if (roleRepository.existsByNameIgnoreCaseAndCreatedByAdminId(name, adminId)) {
+        RoleEntity existing = roleRepository.findByNameIgnoreCaseAndCreatedByAdminId(name, adminId).orElse(null);
+        if (existing != null && !isLegacyPlaceholder(existing)) {
             throw new ApiException("Role already exists.", HttpStatus.CONFLICT);
         }
-        RoleEntity entity = new RoleEntity();
-        entity.setCreatedByAdminId(adminId);
+        RoleEntity entity = existing != null ? existing : new RoleEntity();
+        if (existing == null) entity.setCreatedByAdminId(adminId);
         entity.setStatus("Active");
         mapRequestToEntity(request, entity);
         return mapEntityToResponse(roleRepository.save(entity));
@@ -60,15 +71,19 @@ public class RoleService {
     }
 
     // Full list — used in the Admin's Role Management / list screen (all statuses)
+    @Transactional
     public List<RoleDto.Response> getAllRoles(Long adminId) {
         return roleRepository.findAllByCreatedByAdminId(adminId).stream()
+                .filter(role -> !isLegacyPlaceholder(role))
                 .map(this::mapEntityToResponse)
                 .collect(Collectors.toList());
     }
 
     // SRS: "Available Roles dropdown displays all active roles" — used for the dropdown specifically
+    @Transactional
     public List<RoleDto.Response> getActiveRoles(Long adminId) {
         return roleRepository.findAllByCreatedByAdminIdAndStatus(adminId, "Active").stream()
+                .filter(role -> !isLegacyPlaceholder(role))
                 .map(this::mapEntityToResponse)
                 .collect(Collectors.toList());
     }
@@ -146,5 +161,14 @@ public class RoleService {
                     "Select at least one permission before saving the role.",
                     HttpStatus.BAD_REQUEST);
         }
+    }
+
+    private boolean isLegacyPlaceholder(RoleEntity role) {
+        boolean catalogName = acceptedRoleNames.stream()
+                .anyMatch(name -> name.toLowerCase(Locale.ROOT)
+                        .equals(role.getName().trim().toLowerCase(Locale.ROOT)));
+        boolean emptyPermissions = role.getPermissionsJson() == null
+                || role.getPermissionsJson().trim().equals("[]");
+        return catalogName && role.getDescription() == null && emptyPermissions;
     }
 }

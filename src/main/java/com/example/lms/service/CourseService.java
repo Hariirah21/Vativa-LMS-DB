@@ -10,7 +10,6 @@ import com.example.lms.repository.CourseRepository;
 import com.example.lms.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -29,30 +29,40 @@ public class CourseService {
             Set.of("BEGINNER", "INTERMEDIATE", "ADVANCED");
     private static final Set<String> ALLOWED_IMAGE_TYPES =
             Set.of("image/jpeg", "image/png");
+    private static final Set<String> ALLOWED_IMAGE_EXTENSIONS =
+            Set.of("jpg", "jpeg", "png");
     private static final long MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
     private static final int MAX_NAME_CHARACTERS = 255;
+    private static final String DEFAULT_THUMBNAIL_URL =
+            "/images/default-course-thumbnail.svg";
     private static final Path THUMBNAIL_DIRECTORY =
             Path.of("uploads", "course-thumbnails").toAbsolutePath().normalize();
 
     private final CourseRepository courseRepository;
     private final CourseCategoryRepository categoryRepository;
+    private final CourseCategoryCatalogService categoryCatalogService;
     private final UserRepository userRepository;
 
     public CourseService(
             CourseRepository courseRepository,
             CourseCategoryRepository categoryRepository,
+            CourseCategoryCatalogService categoryCatalogService,
             UserRepository userRepository) {
         this.courseRepository = courseRepository;
         this.categoryRepository = categoryRepository;
+        this.categoryCatalogService = categoryCatalogService;
         this.userRepository = userRepository;
     }
 
     @Transactional
     public CourseDto.CourseResponse createCourse(
-            CourseDto.CourseRequest request, MultipartFile thumbnail) {
+            CourseDto.CourseRequest request,
+            MultipartFile thumbnail,
+            Authentication authentication) {
         String name = validateName(request.getName());
+        ensureUniqueName(name, null);
         CourseCategoryEntity category = getActiveCategory(request.getCategoryId());
-        User instructor = resolveActiveInstructor(request.getInstructorId());
+        User instructor = resolveActiveInstructor(request.getInstructorId(), authentication);
         String level = validateLevel(request.getLevel());
 
         CourseEntity course = CourseEntity.builder()
@@ -61,7 +71,7 @@ public class CourseService {
                 .instructorId(instructor.getId())
                 .level(level)
                 .description(request.getDescription())
-                .thumbnailUrl(storeThumbnail(thumbnail, null))
+                .thumbnailUrl(storeThumbnail(thumbnail, DEFAULT_THUMBNAIL_URL))
                 .build();
         return toResponse(courseRepository.saveAndFlush(course), category, instructor);
     }
@@ -81,12 +91,16 @@ public class CourseService {
 
     @Transactional
     public CourseDto.CourseResponse updateCourse(
-            Long courseId, CourseDto.CourseRequest request, MultipartFile thumbnail) {
+            Long courseId,
+            CourseDto.CourseRequest request,
+            MultipartFile thumbnail,
+            Authentication authentication) {
         CourseEntity course = getCourseOrThrow(courseId);
-        assertInstructorOwnsCourse(course);
+        assertInstructorOwnsCourse(course, authentication);
         String name = validateName(request.getName());
+        ensureUniqueName(name, courseId);
         CourseCategoryEntity category = getActiveCategory(request.getCategoryId());
-        User instructor = resolveActiveInstructor(request.getInstructorId());
+        User instructor = resolveActiveInstructor(request.getInstructorId(), authentication);
         String level = validateLevel(request.getLevel());
 
         course.setName(name);
@@ -99,9 +113,9 @@ public class CourseService {
     }
 
     @Transactional
-    public void deleteCourse(Long courseId) {
+    public void deleteCourse(Long courseId, Authentication authentication) {
         CourseEntity course = getCourseOrThrow(courseId);
-        assertInstructorOwnsCourse(course);
+        assertInstructorOwnsCourse(course, authentication);
         courseRepository.delete(course);
     }
 
@@ -112,18 +126,11 @@ public class CourseService {
     }
 
     private CourseCategoryEntity getActiveCategory(Long categoryId) {
-        CourseCategoryEntity category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ApiException(
-                        "Course category not found with id: " + categoryId,
-                        HttpStatus.NOT_FOUND));
-        if (!Boolean.TRUE.equals(category.getActive())) {
-            throw new ApiException("The selected course category is inactive.", HttpStatus.BAD_REQUEST);
-        }
-        return category;
+        return categoryCatalogService.getSelectableCategory(categoryId);
     }
 
-    private User resolveActiveInstructor(Long requestedInstructorId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    private User resolveActiveInstructor(
+            Long requestedInstructorId, Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
             throw new ApiException("Authentication is required.", HttpStatus.UNAUTHORIZED);
         }
@@ -151,8 +158,8 @@ public class CourseService {
         return instructor;
     }
 
-    private void assertInstructorOwnsCourse(CourseEntity course) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    private void assertInstructorOwnsCourse(
+            CourseEntity course, Authentication authentication) {
         if (authentication == null || !hasRole(authentication, "ROLE_INSTRUCTOR")) {
             return;
         }
@@ -181,7 +188,27 @@ public class CourseService {
                     "Course Name must not exceed 255 characters.",
                     HttpStatus.BAD_REQUEST);
         }
+        int wordCount = name.split(" ").length;
+        if (wordCount < 3) {
+            throw new ApiException(
+                    "Course Name must contain at least 3 words.",
+                    HttpStatus.BAD_REQUEST);
+        }
+        if (wordCount > 10) {
+            throw new ApiException(
+                    "Course Name must not exceed 10 words.",
+                    HttpStatus.BAD_REQUEST);
+        }
         return name;
+    }
+
+    private void ensureUniqueName(String name, Long currentCourseId) {
+        boolean duplicate = currentCourseId == null
+                ? courseRepository.existsByNameIgnoreCase(name)
+                : courseRepository.existsByNameIgnoreCaseAndIdNot(name, currentCourseId);
+        if (duplicate) {
+            throw new ApiException("Course Name already exists.", HttpStatus.CONFLICT);
+        }
     }
 
     private String validateLevel(String rawLevel) {
@@ -195,13 +222,14 @@ public class CourseService {
     }
 
     private String storeThumbnail(MultipartFile thumbnail, String currentUrl) {
-        if (thumbnail == null || thumbnail.isEmpty()) return currentUrl;
-        if (thumbnail.getSize() > MAX_THUMBNAIL_BYTES
-                || !ALLOWED_IMAGE_TYPES.contains(thumbnail.getContentType())) {
-            throw new ApiException("Thumbnail must be a JPG or PNG up to 2 MB.", HttpStatus.BAD_REQUEST);
+        if (thumbnail == null || thumbnail.isEmpty()) {
+            return currentUrl == null || currentUrl.isBlank()
+                    ? DEFAULT_THUMBNAIL_URL
+                    : currentUrl;
         }
-        String extension = "image/png".equals(thumbnail.getContentType()) ? ".png" : ".jpg";
-        String fileName = UUID.randomUUID() + extension;
+        String extension = validateThumbnail(thumbnail);
+        String storedExtension = "png".equals(extension) ? ".png" : ".jpg";
+        String fileName = UUID.randomUUID() + storedExtension;
         try {
             Files.createDirectories(THUMBNAIL_DIRECTORY);
             Files.copy(
@@ -212,6 +240,36 @@ public class CourseService {
         } catch (IOException exception) {
             throw new ApiException("Course thumbnail could not be saved.", HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private String validateThumbnail(MultipartFile thumbnail) {
+        if (thumbnail.getSize() > MAX_THUMBNAIL_BYTES) {
+            throw new ApiException(
+                    "Thumbnail must not exceed 2 MB.", HttpStatus.BAD_REQUEST);
+        }
+
+        String originalName = thumbnail.getOriginalFilename();
+        int extensionSeparator = originalName == null ? -1 : originalName.lastIndexOf('.');
+        String extension = originalName == null || extensionSeparator < 0
+                || extensionSeparator == originalName.length() - 1
+                ? ""
+                : originalName.substring(extensionSeparator + 1).toLowerCase(Locale.ROOT);
+        String contentType = thumbnail.getContentType() == null
+                ? ""
+                : thumbnail.getContentType().toLowerCase(Locale.ROOT);
+
+        boolean matchingType = switch (extension) {
+            case "jpg", "jpeg" -> "image/jpeg".equals(contentType);
+            case "png" -> "image/png".equals(contentType);
+            default -> false;
+        };
+        if (!ALLOWED_IMAGE_EXTENSIONS.contains(extension)
+                || !ALLOWED_IMAGE_TYPES.contains(contentType)
+                || !matchingType) {
+            throw new ApiException(
+                    "Thumbnail must be a JPG, JPEG, or PNG file.", HttpStatus.BAD_REQUEST);
+        }
+        return extension;
     }
 
     private CourseDto.CourseResponse toResponse(CourseEntity course) {
@@ -237,7 +295,9 @@ public class CourseService {
                 .instructorEmail(instructor == null ? null : instructor.getEmail())
                 .level(course.getLevel())
                 .description(course.getDescription())
-                .thumbnailUrl(course.getThumbnailUrl())
+                .thumbnailUrl(course.getThumbnailUrl() == null || course.getThumbnailUrl().isBlank()
+                        ? DEFAULT_THUMBNAIL_URL
+                        : course.getThumbnailUrl())
                 .createdAt(course.getCreatedAt())
                 .updatedAt(course.getUpdatedAt())
                 .build();

@@ -15,6 +15,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -66,6 +68,52 @@ class StaffControllerIntegrationTests {
                 .acceptedTerms(true)
                 .active(true)
                 .build());
+    }
+
+    @Test
+    void roleListStartsEmptyAndCreatedRoleSupportsCrud() throws Exception {
+        mockMvc.perform(get("/api/roles")
+                        .with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+
+        String createdResponse = mockMvc.perform(post("/api/roles")
+                        .with(user("admin@example.com").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(roleBody("Course Reviewer")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Course Reviewer"))
+                .andReturn().getResponse().getContentAsString();
+        long roleId = objectMapper.readTree(createdResponse).get("id").asLong();
+
+        mockMvc.perform(get("/api/roles").with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].name").value("Course Reviewer"));
+
+        mockMvc.perform(put("/api/roles/{id}", roleId)
+                        .with(user("admin@example.com").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(roleBody("Senior Course Reviewer")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Senior Course Reviewer"));
+
+        mockMvc.perform(delete("/api/roles/{id}", roleId)
+                        .with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/roles").with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void applicationModulesComeFromTheModuleConfigurationDependency() throws Exception {
+        mockMvc.perform(get("/api/application-modules")
+                        .with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].name", hasItems(
+                        "Authentication",
+                        "Course Management",
+                        "Content Management",
+                        "Enrollment")));
     }
 
     @Test
@@ -142,5 +190,24 @@ class StaffControllerIntegrationTests {
                   ]
                 }
                 """.formatted(username, email, role);
+    }
+
+    private String roleBody(String roleName) {
+        return """
+                {
+                  "name": "%s",
+                  "description": null,
+                  "permissions": [{
+                    "id": "course-management",
+                    "name": "Course Management",
+                    "enabled": true,
+                    "features": [{
+                      "id": "course-list",
+                      "name": "Course List",
+                      "permissions": {"create": false, "read": true, "update": false, "delete": false}
+                    }]
+                  }]
+                }
+                """.formatted(roleName);
     }
 }

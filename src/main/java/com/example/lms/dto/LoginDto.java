@@ -33,6 +33,10 @@ public class LoginDto {
         // Optional field from the Field List - not mandatory.
         // When true, LoginService issues a longer-lived JWT (see JwtUtil).
         private Boolean rememberMe;
+
+        public void setEmail(String email) {
+            this.email = email == null ? null : email.trim();
+        }
     }
 
     @Data

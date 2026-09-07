@@ -5,34 +5,33 @@ import com.example.lms.dto.CourseCategoryDto;
 import com.example.lms.dto.InstructorDto;
 import com.example.lms.entity.User;
 import com.example.lms.exception.ApiException;
-import com.example.lms.repository.CourseCategoryRepository;
 import com.example.lms.repository.UserRepository;
+import com.example.lms.service.CourseCategoryCatalogService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 @RestController
 public class CourseReferenceController {
-    private final CourseCategoryRepository categoryRepository;
+    private final CourseCategoryCatalogService categoryCatalogService;
     private final UserRepository userRepository;
 
     public CourseReferenceController(
-            CourseCategoryRepository categoryRepository,
+            CourseCategoryCatalogService categoryCatalogService,
             UserRepository userRepository) {
-        this.categoryRepository = categoryRepository;
+        this.categoryCatalogService = categoryCatalogService;
         this.userRepository = userRepository;
     }
 
     @GetMapping("/api/course-categories/active")
     @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
     public ResponseEntity<ApiResponse<List<CourseCategoryDto>>> activeCategories() {
-        List<CourseCategoryDto> categories = categoryRepository.findByActiveTrueOrderByNameAsc()
+        List<CourseCategoryDto> categories = categoryCatalogService.getSelectableCategories()
                 .stream()
                 .map(category -> CourseCategoryDto.builder()
                         .id(category.getId())
@@ -50,11 +49,12 @@ public class CourseReferenceController {
     public ResponseEntity<ApiResponse<List<InstructorDto>>> activeInstructors(
             Authentication authentication) {
         boolean admin = authentication.getAuthorities().stream()
-                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
+                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority())
+                        || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
         List<User> instructors;
         if (admin) {
             instructors = userRepository
-                    .findByRoleIgnoreCaseAndActiveTrueOrderByFirstNameAscLastNameAsc("INSTRUCTOR");
+                    .findActiveUsersByRole("INSTRUCTOR");
         } else {
             User current = userRepository.findByEmailIgnoreCase(authentication.getName())
                     .orElseThrow(() -> new ApiException(

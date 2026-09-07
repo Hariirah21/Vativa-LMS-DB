@@ -14,6 +14,9 @@ public class PackageEntity {
     @Column(nullable = false, unique = true)
     private String name;
 
+    @Column(name = "available_package", nullable = false, length = 20, columnDefinition = "varchar(20) default 'AVAILABLE'")
+    private String availablePackage = "AVAILABLE";
+
     @Column(columnDefinition = "TEXT")
     private String description;
 
@@ -59,6 +62,9 @@ public class PackageEntity {
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+
+    public String getAvailablePackage() { return availablePackage; }
+    public void setAvailablePackage(String availablePackage) { this.availablePackage = availablePackage; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }

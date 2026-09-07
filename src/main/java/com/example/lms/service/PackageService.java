@@ -65,6 +65,7 @@ public class PackageService {
 
     private void mapRequestToEntity(PackageDto.Request request, PackageEntity entity) {
         entity.setName(request.getName());
+        entity.setAvailablePackage(request.getAvailablePackage());
         entity.setDescription(request.getDescription());
         entity.setPrice(request.getPrice());
         entity.setBillingCycle(request.getBillingCycle());
@@ -81,6 +82,7 @@ public class PackageService {
         PackageDto.Response response = new PackageDto.Response();
         response.setId(entity.getId());
         response.setName(entity.getName());
+        response.setAvailablePackage(entity.getAvailablePackage());
         response.setDescription(entity.getDescription());
         response.setPrice(entity.getPrice());
         response.setBillingCycle(entity.getBillingCycle());

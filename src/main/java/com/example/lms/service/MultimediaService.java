@@ -3,18 +3,24 @@ package com.example.lms.service;
 import com.example.lms.config.MultimediaProperties;
 import com.example.lms.dto.MultimediaDto;
 import com.example.lms.entity.CourseEntity;
-import com.example.lms.entity.MultimediaResource;
+import com.example.lms.entity.MultimediaEntity;
+import com.example.lms.entity.User;
 import com.example.lms.exception.ApiException;
 import com.example.lms.exception.FileStorageException;
+import com.example.lms.repository.CourseEnrollmentRepository;
 import com.example.lms.repository.CourseRepository;
-import com.example.lms.repository.MultimediaResourceRepository;
+import com.example.lms.repository.MultimediaRepository;
+import com.example.lms.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,23 +28,32 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Service
 @RequiredArgsConstructor
 public class MultimediaService {
 
-    private static final Set<String> ALLOWED_EXTENSIONS =
-            Set.of("mp4", "mp3", "pdf", "docx", "pptx", "xlsx", "jpg", "jpeg", "png", "zip");
-
-    private final MultimediaResourceRepository multimediaRepository;
+    private final MultimediaRepository multimediaRepository;
     private final CourseRepository courseRepository;
+    private final CourseEnrollmentRepository enrollmentRepository;
+    private final UserRepository userRepository;
     private final MultimediaProperties properties;
+    private final PlatformTransactionManager transactionManager;
 
     private Path storageRoot;
+    private Set<String> supportedFileTypes;
+    private final ConcurrentMap<UUID, CompletableFuture<MultimediaDto.ResourceResponse>>
+            inFlightUploads = new ConcurrentHashMap<>();
 
     @PostConstruct
     void initializeStorage() {
@@ -49,6 +64,14 @@ public class MultimediaService {
             );
         }
 
+        if (properties.getMaxFileSize() == null || properties.getMaxFileSize().toBytes() <= 0) {
+            throw new IllegalStateException("Multimedia maximum file size must be greater than zero.");
+        }
+        supportedFileTypes = normalizeSupportedFileTypes(properties.getSupportedFileTypes());
+        if (supportedFileTypes.isEmpty()) {
+            throw new IllegalStateException("At least one multimedia file type must be configured.");
+        }
+
         storageRoot = Path.of(properties.getStorageLocation()).toAbsolutePath().normalize();
         try {
             Files.createDirectories(storageRoot);
@@ -57,8 +80,78 @@ public class MultimediaService {
         }
     }
 
-    @Transactional
-    public synchronized MultimediaDto.ResourceResponse upload(
+    public MultimediaDto.ResourceResponse upload(
+            MultimediaDto.UploadRequest request,
+            String uploadedBy
+    ) {
+        UUID submissionId = request.getClientRequestId();
+        if (submissionId == null) {
+            return executeUploadTransaction(request, uploadedBy);
+        }
+
+        CompletableFuture<MultimediaDto.ResourceResponse> current = new CompletableFuture<>();
+        CompletableFuture<MultimediaDto.ResourceResponse> first =
+                inFlightUploads.putIfAbsent(submissionId, current);
+        if (first != null) {
+            return awaitFirstSubmission(first);
+        }
+
+        try {
+            MultimediaDto.ResourceResponse response = executeUploadTransaction(request, uploadedBy);
+            current.complete(response);
+            return response;
+        } catch (RuntimeException exception) {
+            current.completeExceptionally(exception);
+            throw exception;
+        } finally {
+            inFlightUploads.remove(submissionId, current);
+        }
+    }
+
+    private MultimediaDto.ResourceResponse executeUploadTransaction(
+            MultimediaDto.UploadRequest request,
+            String uploadedBy
+    ) {
+        MultimediaDto.ResourceResponse response;
+        try {
+            response = new TransactionTemplate(transactionManager)
+                    .execute(status -> uploadOnce(request, uploadedBy));
+        } catch (DataIntegrityViolationException exception) {
+            response = findExistingSubmission(request.getClientRequestId());
+            if (response == null) {
+                throw exception;
+            }
+        }
+        if (response == null) {
+            throw new FileStorageException("The upload transaction did not return a resource.");
+        }
+        return response;
+    }
+
+    private MultimediaDto.ResourceResponse findExistingSubmission(UUID submissionId) {
+        if (submissionId == null) {
+            return null;
+        }
+        return new TransactionTemplate(transactionManager).execute(status ->
+                multimediaRepository.findByClientRequestId(submissionId)
+                        .map(this::toResponse)
+                        .orElse(null));
+    }
+
+    private MultimediaDto.ResourceResponse awaitFirstSubmission(
+            CompletableFuture<MultimediaDto.ResourceResponse> first
+    ) {
+        try {
+            return first.join();
+        } catch (CompletionException exception) {
+            if (exception.getCause() instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw exception;
+        }
+    }
+
+    private MultimediaDto.ResourceResponse uploadOnce(
             MultimediaDto.UploadRequest request,
             String uploadedBy
     ) {
@@ -92,9 +185,10 @@ public class MultimediaService {
                 Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING);
             }
 
-            MultimediaResource saved = multimediaRepository.save(MultimediaResource.builder()
+            MultimediaEntity saved = multimediaRepository.saveAndFlush(MultimediaEntity.builder()
                     .resourceName(request.getResourceName().trim())
                     .resourceDescription(trimToNull(request.getResourceDescription()))
+                    .resourceType(request.getResourceType())
                     .filePath(destination.toString())
                     .originalFileName(originalFileName)
                     .contentType(file.getContentType())
@@ -117,13 +211,38 @@ public class MultimediaService {
         }
     }
 
+    public MultimediaDto.PreviewInfo preview(MultipartFile file) {
+        validateFile(file);
+        return MultimediaDto.PreviewInfo.builder()
+                .fileName(safeOriginalFileName(file))
+                .contentType(file.getContentType())
+                .size(file.getSize())
+                .inlinePreviewSupported(supportsInlinePreview(file.getContentType()))
+                .build();
+    }
+
+    public MultimediaDto.UploadConfiguration uploadConfiguration() {
+        return MultimediaDto.UploadConfiguration.builder()
+                .supportedFileTypes(supportedFileTypes.stream()
+                        .map(extension -> extension.toUpperCase(Locale.ROOT))
+                        .toList())
+                .maximumUploadSizeBytes(properties.getMaxFileSize().toBytes())
+                .maximumUploadSizeMegabytes(properties.getMaxFileSize().toMegabytes())
+                .build();
+    }
+
     @Transactional(readOnly = true)
-    public List<MultimediaDto.ResourceResponse> listByCourse(Long courseId, boolean privilegedUser) {
+    public List<MultimediaDto.ResourceResponse> listByCourse(
+            Long courseId,
+            boolean privilegedUser,
+            String username
+    ) {
         if (!courseRepository.existsById(courseId)) {
             throw new ApiException("Course not found.", HttpStatus.NOT_FOUND);
         }
 
-        List<MultimediaResource> resources = privilegedUser
+        boolean assignedLearner = !privilegedUser && hasActiveCourseAssignment(courseId, username);
+        List<MultimediaEntity> resources = privilegedUser || assignedLearner
                 ? multimediaRepository.findByCourseIdOrderByCreatedAtDesc(courseId)
                 : multimediaRepository.findByCourseIdAndPublishedTrueOrderByCreatedAtDesc(courseId);
 
@@ -132,7 +251,7 @@ public class MultimediaService {
 
     @Transactional
     public void delete(UUID id) {
-        MultimediaResource resource = findResource(id);
+        MultimediaEntity resource = findResource(id);
         multimediaRepository.delete(resource);
         multimediaRepository.flush();
 
@@ -144,10 +263,15 @@ public class MultimediaService {
     }
 
     @Transactional(readOnly = true)
-    public DownloadedFile loadForDownload(UUID id, boolean privilegedUser) {
-        MultimediaResource multimedia = findResource(id);
-        if (!privilegedUser && !multimedia.isPublished()) {
-            throw new ApiException("This resource is not published.", HttpStatus.FORBIDDEN);
+    public DownloadedFile loadForDownload(UUID id, boolean privilegedUser, String username) {
+        MultimediaEntity multimedia = findResource(id);
+        boolean allowedByAssignment = !privilegedUser
+                && hasActiveCourseAssignment(multimedia.getCourse().getId(), username);
+        if (!privilegedUser && !multimedia.isPublished() && !allowedByAssignment) {
+            throw new ApiException(
+                    "This resource is not published or assigned to this learner.",
+                    HttpStatus.FORBIDDEN
+            );
         }
 
         try {
@@ -163,9 +287,27 @@ public class MultimediaService {
         }
     }
 
-    private MultimediaResource findResource(UUID id) {
+    private MultimediaEntity findResource(UUID id) {
         return multimediaRepository.findById(id)
                 .orElseThrow(() -> new ApiException("Multimedia resource not found.", HttpStatus.NOT_FOUND));
+    }
+
+    private boolean hasActiveCourseAssignment(Long courseId, String username) {
+        if (!StringUtils.hasText(username)) {
+            return false;
+        }
+        return userRepository.findByEmailIgnoreCase(username)
+                .filter(user -> Boolean.TRUE.equals(user.getActive()))
+                .filter(this::isLearner)
+                .map(User::getId)
+                .map(userId -> enrollmentRepository.existsActiveAssignment(
+                        courseId, userId, LocalDateTime.now()))
+                .orElse(false);
+    }
+
+    private boolean isLearner(User user) {
+        return user.getRole() != null
+                && "LEARNER".equalsIgnoreCase(user.getRole().replace("ROLE_", "").trim());
     }
 
     private void validateFile(MultipartFile file) {
@@ -180,19 +322,37 @@ public class MultimediaService {
         }
 
         String extension = extensionOf(safeOriginalFileName(file));
-        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+        if (!supportedFileTypes.contains(extension)) {
             throw new ApiException(
-                    "Unsupported file format. Allowed formats: MP4, MP3, PDF, DOCX, PPTX, XLSX, JPG, JPEG, PNG, ZIP.",
+                    "Unsupported file format. Allowed formats: "
+                            + supportedFileTypes.stream()
+                                    .map(value -> value.toUpperCase(Locale.ROOT))
+                                    .collect(java.util.stream.Collectors.joining(", "))
+                            + ".",
                     HttpStatus.BAD_REQUEST
             );
         }
     }
 
-    private MultimediaDto.ResourceResponse toResponse(MultimediaResource resource) {
+    private Set<String> normalizeSupportedFileTypes(List<String> configuredTypes) {
+        if (configuredTypes == null) {
+            return Set.of();
+        }
+        return configuredTypes.stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .map(value -> value.startsWith(".") ? value.substring(1) : value)
+                .map(value -> value.toLowerCase(Locale.ROOT))
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private MultimediaDto.ResourceResponse toResponse(MultimediaEntity resource) {
         return MultimediaDto.ResourceResponse.builder()
                 .id(resource.getId())
                 .resourceName(resource.getResourceName())
                 .resourceDescription(resource.getResourceDescription())
+                .resourceType(resource.getResourceType())
                 .courseId(resource.getCourse().getId())
                 .createdAt(resource.getCreatedAt())
                 .uploadedBy(resource.getUploadedBy())
@@ -201,6 +361,7 @@ public class MultimediaService {
                         .fileName(resource.getOriginalFileName())
                         .contentType(resource.getContentType())
                         .size(resource.getFileSize())
+                        .inlinePreviewSupported(supportsInlinePreview(resource.getContentType()))
                         .downloadUrl("/api/multimedia/files/" + resource.getId())
                         .build())
                 .build();
@@ -235,6 +396,17 @@ public class MultimediaService {
             return null;
         }
         return value.trim();
+    }
+
+    private boolean supportsInlinePreview(String contentType) {
+        if (!StringUtils.hasText(contentType)) {
+            return false;
+        }
+        String normalized = contentType.toLowerCase(Locale.ROOT);
+        return normalized.startsWith("image/")
+                || normalized.startsWith("video/")
+                || normalized.startsWith("audio/")
+                || normalized.equals("application/pdf");
     }
 
     private void deleteQuietly(Path path) {

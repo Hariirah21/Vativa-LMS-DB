@@ -1,6 +1,7 @@
 package com.example.lms.dto;
 
-import jakarta.validation.constraints.NotBlank;
+import com.example.lms.entity.MultimediaEntity.ValidResourceName;
+import com.example.lms.entity.MultimediaResourceType;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -10,6 +11,7 @@ import lombok.NoArgsConstructor;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public final class MultimediaDto {
@@ -22,12 +24,14 @@ public final class MultimediaDto {
     @AllArgsConstructor
     public static class UploadRequest {
 
-        @NotBlank(message = "Resource name is required.")
-        @Size(min = 4, max = 100, message = "Resource name must be between 4 and 100 characters.")
+        @ValidResourceName
         private String resourceName;
 
         @Size(max = 500, message = "Resource description must not exceed 500 characters.")
         private String resourceDescription;
+
+        @NotNull(message = "Resource type is required.")
+        private MultimediaResourceType resourceType;
 
         @NotNull(message = "Course ID is required.")
         private Long courseId;
@@ -49,6 +53,7 @@ public final class MultimediaDto {
         private UUID id;
         private String resourceName;
         private String resourceDescription;
+        private MultimediaResourceType resourceType;
         private Long courseId;
         private LocalDateTime createdAt;
         private String uploadedBy;
@@ -64,6 +69,17 @@ public final class MultimediaDto {
         private String fileName;
         private String contentType;
         private long size;
+        private boolean inlinePreviewSupported;
         private String downloadUrl;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class UploadConfiguration {
+        private List<String> supportedFileTypes;
+        private long maximumUploadSizeBytes;
+        private long maximumUploadSizeMegabytes;
     }
 }

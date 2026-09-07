@@ -45,6 +45,46 @@
       "type": "java.lang.Long",
       "description": "Remember-me JWT lifetime in milliseconds.",
       "defaultValue": 604800000
+    },
+    {
+      "name": "lms.multimedia.storage-provider",
+      "type": "java.lang.String",
+      "description": "Storage provider used for multimedia files."
+    },
+    {
+      "name": "lms.multimedia.storage-location",
+      "type": "java.lang.String",
+      "description": "Filesystem location for multimedia files."
+    },
+    {
+      "name": "lms.multimedia.max-file-size",
+      "type": "org.springframework.util.unit.DataSize",
+      "description": "Maximum multimedia file size."
+    },
+    {
+      "name": "lms.multimedia.supported-file-types",
+      "type": "java.util.List<java.lang.String>",
+      "description": "Allowed multimedia file extensions."
+    },
+    {
+      "name": "lms.ebook.storage-location",
+      "type": "java.lang.String",
+      "description": "Filesystem location for ebook media."
+    },
+    {
+      "name": "lms.ebook.max-media-size",
+      "type": "org.springframework.util.unit.DataSize",
+      "description": "Maximum ebook media size."
+    },
+    {
+      "name": "app.roles.accepted",
+      "type": "java.util.List<java.lang.String>",
+      "description": "Comma-separated role names accepted by the application."
+    },
+    {
+      "name": "app.modules.configuration",
+      "type": "org.springframework.core.io.Resource",
+      "description": "Classpath resource containing application module configuration."
     }
   ]
 }

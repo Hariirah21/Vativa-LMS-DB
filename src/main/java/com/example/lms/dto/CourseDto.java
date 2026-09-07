@@ -25,13 +25,13 @@ public class CourseDto {
         @Size(max = 255, message = "Course Name must not exceed 255 characters.")
         private String name;
 
-        @NotNull(message = "Course Category is required")
+        @NotNull(message = "Course Category is required.")
         private Long categoryId;
 
-        @NotNull(message = "Instructor selection is required")
+        @NotNull(message = "Instructor selection is required.")
         private Long instructorId;
 
-        @NotBlank(message = "Course Level is required")
+        @NotBlank(message = "Course Level is required.")
         private String level;
 
         // Optional per SRS - max 1000 characters

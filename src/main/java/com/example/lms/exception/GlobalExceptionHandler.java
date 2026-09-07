@@ -1,6 +1,8 @@
 package com.example.lms.exception;
 
 import com.example.lms.dto.ApiResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +19,8 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
 
     // Field-level validation errors (e.g. @NotBlank, @Pattern, @Email)
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -57,6 +61,15 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("You are not authorized to perform this action."));
     }
 
+    @ExceptionHandler(CourseCreationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleCourseCreationFailure(
+            CourseCreationException ex) {
+        LOGGER.error("Unexpected server error while creating a course.", ex.getCause());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(
+                        "Unable to create the course due to a server error. Please try again later."));
+    }
+
     // Concurrent-signup race: two requests with the same email slip past the
     // existsByEmailIgnoreCase() pre-check at the same instant, and the DB's
     // unique constraint on `email` is what actually stops the second insert
@@ -69,6 +82,12 @@ public class GlobalExceptionHandler {
         if (databaseMessage.contains("users_email") || databaseMessage.contains("(email)")) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(ApiResponse.error("Email ID already exists."));
+        }
+        if (databaseMessage.contains("uk_course_name")
+                || databaseMessage.contains("courses_name")
+                || databaseMessage.contains("courses(name)")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error("Course Name already exists."));
         }
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error("The record conflicts with an existing database constraint."));

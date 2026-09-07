@@ -2,6 +2,7 @@ package com.example.lms.controller;
 
 import com.example.lms.dto.ApiResponse;
 import com.example.lms.dto.MultimediaDto;
+import com.example.lms.entity.MultimediaResourceType;
 import com.example.lms.service.MultimediaService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,9 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -42,14 +45,43 @@ public class MultimediaController {
         return ResponseEntity.ok(ApiResponse.success("Resource uploaded successfully.", uploaded));
     }
 
+    @PostMapping(value = "/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN', 'INSTRUCTOR')")
+    public ResponseEntity<ApiResponse<MultimediaDto.PreviewInfo>> preview(
+            @RequestPart("file") MultipartFile file
+    ) {
+        MultimediaDto.PreviewInfo preview = multimediaService.preview(file);
+        return ResponseEntity.ok(ApiResponse.success("File preview generated successfully.", preview));
+    }
+
     @GetMapping("/{courseId}")
     public ResponseEntity<ApiResponse<List<MultimediaDto.ResourceResponse>>> listByCourse(
             @PathVariable Long courseId,
             Authentication authentication
     ) {
         List<MultimediaDto.ResourceResponse> resources =
-                multimediaService.listByCourse(courseId, isAdminOrInstructor(authentication));
+                multimediaService.listByCourse(
+                        courseId,
+                        isAdminOrInstructor(authentication),
+                        authentication.getName()
+                );
         return ResponseEntity.ok(ApiResponse.success("Resources fetched successfully.", resources));
+    }
+
+    @GetMapping("/resource-types")
+    public ResponseEntity<ApiResponse<List<MultimediaResourceType>>> listResourceTypes() {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Resource types fetched successfully.",
+                List.of(MultimediaResourceType.values())
+        ));
+    }
+
+    @GetMapping("/upload-configuration")
+    public ResponseEntity<ApiResponse<MultimediaDto.UploadConfiguration>> uploadConfiguration() {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Multimedia upload configuration fetched successfully.",
+                multimediaService.uploadConfiguration()
+        ));
     }
 
     @DeleteMapping("/{id}")
@@ -65,7 +97,11 @@ public class MultimediaController {
             Authentication authentication
     ) {
         MultimediaService.DownloadedFile file =
-                multimediaService.loadForDownload(id, isAdminOrInstructor(authentication));
+                multimediaService.loadForDownload(
+                        id,
+                        isAdminOrInstructor(authentication),
+                        authentication.getName()
+                );
 
         MediaType contentType = MediaType.APPLICATION_OCTET_STREAM;
         if (file.contentType() != null) {
