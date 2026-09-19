@@ -33,4 +33,46 @@ public interface CourseEnrollmentRepository extends JpaRepository<CourseEnrollme
             from CourseEnrollmentEntity enrollment
             """)
     List<Object[]> countTotalAndCompletedEnrollments();
+
+    @Query("""
+            select enrollment.userId,
+                   count(distinct enrollment.courseId),
+                   count(distinct case
+                       when enrollment.progressPercent >= 100 then enrollment.courseId
+                       else null
+                   end),
+                   count(distinct case
+                       when enrollment.progressPercent < 100 then enrollment.courseId
+                       else null
+                   end),
+                   avg(case
+                       when enrollment.scorePercent between 0 and 100 then enrollment.scorePercent
+                       else null
+                   end),
+                   max(enrollment.completedAt)
+            from CourseEnrollmentEntity enrollment
+            where enrollment.userId in :userIds
+              and (
+                    :instructorId is null
+                    or exists (
+                        select course.id
+                        from CourseEntity course
+                        where course.id = enrollment.courseId
+                          and course.instructorId = :instructorId
+                    )
+              )
+            group by enrollment.userId
+            """)
+    List<Object[]> findLearnerReportMetrics(@Param("userIds") Collection<Long> userIds,
+                                            @Param("instructorId") Long instructorId);
+
+    @Query("""
+            select case when count(enrollment) > 0 then true else false end
+            from CourseEnrollmentEntity enrollment, CourseEntity course
+            where enrollment.userId = :userId
+              and course.id = enrollment.courseId
+              and course.instructorId = :instructorId
+            """)
+    boolean isLearnerAccessibleToInstructor(@Param("userId") Long userId,
+                                            @Param("instructorId") Long instructorId);
 }

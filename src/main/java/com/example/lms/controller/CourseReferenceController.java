@@ -1,5 +1,15 @@
 package com.example.lms.controller;
 
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.example.lms.dto.ApiResponse;
 import com.example.lms.dto.CourseCategoryDto;
 import com.example.lms.dto.InstructorDto;
@@ -7,15 +17,8 @@ import com.example.lms.entity.User;
 import com.example.lms.exception.ApiException;
 import com.example.lms.repository.UserRepository;
 import com.example.lms.service.CourseCategoryCatalogService;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
+@RequestMapping("/api")
 @RestController
 public class CourseReferenceController {
     private final CourseCategoryCatalogService categoryCatalogService;
@@ -28,7 +31,7 @@ public class CourseReferenceController {
         this.userRepository = userRepository;
     }
 
-    @GetMapping("/api/course-categories/active")
+    @GetMapping("/course-categories/active")
     @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
     public ResponseEntity<ApiResponse<List<CourseCategoryDto>>> activeCategories() {
         List<CourseCategoryDto> categories = categoryCatalogService.getSelectableCategories()
@@ -44,7 +47,7 @@ public class CourseReferenceController {
                 "Active course categories fetched successfully.", categories));
     }
 
-    @GetMapping("/api/instructors/active")
+    @GetMapping("/instructors/active")
     @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
     public ResponseEntity<ApiResponse<List<InstructorDto>>> activeInstructors(
             Authentication authentication) {

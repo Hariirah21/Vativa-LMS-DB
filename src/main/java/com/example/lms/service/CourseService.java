@@ -67,6 +67,7 @@ public class CourseService {
 
         CourseEntity course = CourseEntity.builder()
                 .name(name)
+                .courseCode(normalizeCourseCode(request.getCourseCode()))
                 .categoryId(category.getId())
                 .instructorId(instructor.getId())
                 .level(level)
@@ -104,6 +105,9 @@ public class CourseService {
         String level = validateLevel(request.getLevel());
 
         course.setName(name);
+        if (request.getCourseCode() != null) {
+            course.setCourseCode(normalizeCourseCode(request.getCourseCode()));
+        }
         course.setCategoryId(category.getId());
         course.setInstructorId(instructor.getId());
         course.setLevel(level);
@@ -221,6 +225,19 @@ public class CourseService {
         return level;
     }
 
+    private String normalizeCourseCode(String rawCourseCode) {
+        if (rawCourseCode == null || rawCourseCode.isBlank()) {
+            return null;
+        }
+        String courseCode = rawCourseCode.trim();
+        if (courseCode.length() > 100) {
+            throw new ApiException(
+                    "Course Code must not exceed 100 characters.",
+                    HttpStatus.BAD_REQUEST);
+        }
+        return courseCode;
+    }
+
     private String storeThumbnail(MultipartFile thumbnail, String currentUrl) {
         if (thumbnail == null || thumbnail.isEmpty()) {
             return currentUrl == null || currentUrl.isBlank()
@@ -286,6 +303,7 @@ public class CourseService {
         return CourseDto.CourseResponse.builder()
                 .id(course.getId())
                 .name(course.getName())
+                .courseCode(course.getCourseCode())
                 .categoryId(course.getCategoryId())
                 .categoryName(category == null ? "" : category.getName())
                 .categoryDescription(category == null ? null : category.getDescription())

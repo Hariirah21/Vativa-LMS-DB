@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 public interface LoginActivityRepository extends JpaRepository<LoginActivityEntity, Long> {
@@ -51,4 +52,12 @@ public interface LoginActivityRepository extends JpaRepository<LoginActivityEnti
               and activity.expiresAt > :now
             """)
     long countOnlineUsers(@Param("now") LocalDateTime now);
+
+    @Query("""
+            select activity.userId, max(activity.loggedInAt)
+            from LoginActivityEntity activity
+            where activity.userId in :userIds
+            group by activity.userId
+            """)
+    List<Object[]> findLastLoginsByUserIds(@Param("userIds") Collection<Long> userIds);
 }
