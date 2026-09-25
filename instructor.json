@@ -1,0 +1,11 @@
+{
+  "firstName": "Demo",
+  "lastName": "Instructor",
+  "email": "instructor@example.com",
+  "countryCode": "+91",
+  "phoneNumber": "9876543210",
+  "password": "Instructor@123",
+  "confirmPassword": "Instructor@123",
+  "acceptTerms": true,
+  "role": "INSTRUCTOR"
+}

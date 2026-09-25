@@ -35,7 +35,7 @@ import java.nio.charset.StandardCharsets;
 @RequestMapping("/api/question-banks")
 @RequiredArgsConstructor
 @Validated
-@PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN', 'INSTRUCTOR')")
+@PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
 public class QuestionBankController {
 
     private final QuestionBankService questionBankService;

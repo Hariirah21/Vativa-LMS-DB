@@ -16,6 +16,13 @@ public class ForgotPasswordController {
 
     private final ForgotPasswordService forgotPasswordService;
 
+    @GetMapping("/validate-token")
+    public ResponseEntity<ApiResponse<Void>> validateToken(
+            @RequestParam(name = "token", required = false) String token) {
+        forgotPasswordService.validateResetToken(token);
+        return ResponseEntity.ok(ApiResponse.success("Password reset link is valid."));
+    }
+
     @PostMapping("/send-reset-link")
     public ResponseEntity<ApiResponse<Void>> sendResetLink(
             @Valid @RequestBody ForgotPasswordDto.SendResetLinkRequest request) {

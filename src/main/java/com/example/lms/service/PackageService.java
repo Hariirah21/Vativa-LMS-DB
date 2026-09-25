@@ -4,13 +4,17 @@ import com.example.lms.dto.PackageAssignmentDto;
 import com.example.lms.dto.PackageDto;
 import com.example.lms.entity.PackageEntity;
 import com.example.lms.entity.SystemFeatureEntity;
+import com.example.lms.entity.User;
 import com.example.lms.exception.ApiException;
 import com.example.lms.exception.RateLimitExceededException;
 import com.example.lms.repository.PackageRepository;
 import com.example.lms.repository.SystemFeatureRepository;
+import com.example.lms.repository.UserRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -28,12 +32,15 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+
 @Service
 @RequiredArgsConstructor
 public class PackageService {
 
     private final PackageRepository packageRepository;
     private final SystemFeatureRepository systemFeatureRepository;
+    private final UserRepository userRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -189,32 +196,15 @@ public class PackageService {
         packageRepository.deleteById(id);
     }
 
-    /**
-     * Doc06 Fields #19-22 - the "Update Package" popup: assign an existing
-     * package to a registered user by Email ID. This is distinct from
-     * updatePackage() above, which edits a package's own master-data fields.
-     *
-     * STILL NEEDS YOUR USER ENTITY/REPOSITORY: there's no User module in the
-     * files shared so far, so the "does this email belong to a registered
-     * user" lookup and the actual persistence of "this user now has this
-     * package" can't be wired up without fabricating a schema that might not
-     * match your real one. Once you share your User entity/repository, this
-     * becomes a two-line lookup + save.
-     */
     @Transactional
     public void assignPackageToUser(PackageAssignmentDto request) {
         PackageEntity packageEntity = packageRepository.findById(request.getPackageId())
                 .orElseThrow(() -> new ApiException("Package not found", HttpStatus.NOT_FOUND));
 
-        // TODO: replace with your real lookup, e.g.:
-        // User user = userRepository.findByEmailIgnoreCase(request.getEmailId())
-        //         .orElseThrow(() -> new ApiException("Please select an Email ID", HttpStatus.BAD_REQUEST));
-        // user.setPackageId(packageEntity.getId());
-        // userRepository.save(user);
-        throw new UnsupportedOperationException(
-                "assignPackageToUser requires the User entity/repository - not yet available. " +
-                        "Package " + packageEntity.getId() + " and emailId " + request.getEmailId() +
-                        " were validated up to this point.");
+        User user = userRepository.findByEmailIgnoreCase(request.getEmailId())
+                .orElseThrow(() -> new ApiException("Please select an Email ID", HttpStatus.BAD_REQUEST));
+        user.setPackageId(packageEntity.getId());
+        userRepository.save(user);
     }
 
     /**
@@ -269,7 +259,7 @@ public class PackageService {
         entity.setStorageLimit(request.getStorageLimit());
         try {
             entity.setPermissionsJson(objectMapper.writeValueAsString(request.getPermissions()));
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize permissions", e);
         }
     }
@@ -293,7 +283,7 @@ public class PackageService {
                         entity.getPermissionsJson(), new TypeReference<List<PackageDto.Category>>() {});
                 response.setPermissions(categories);
             }
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to deserialize permissions", e);
         }
         return response;

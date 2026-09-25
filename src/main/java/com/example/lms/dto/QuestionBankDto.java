@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -55,6 +56,11 @@ public final class QuestionBankDto {
         private String description;
 
         private Long courseId;
+        @DecimalMin("0.00")
+        @DecimalMax("100.00")
+        private BigDecimal passPercentage;
+        @Positive
+        private Integer maxAttempts;
 
         @Valid
         @Builder.Default
@@ -76,6 +82,11 @@ public final class QuestionBankDto {
         @Size(max = 1000, message = "Question Bank Description must not exceed 1000 characters.")
         private String description;
         private Long courseId;
+        @DecimalMin("0.00")
+        @DecimalMax("100.00")
+        private BigDecimal passPercentage;
+        @Positive
+        private Integer maxAttempts;
         @NotNull(message = "Version is required.")
         @PositiveOrZero(message = "Version must be zero or greater.")
         private Long version;
@@ -118,22 +129,12 @@ public final class QuestionBankDto {
         private ScoringType scoringType;
         @DecimalMin(value = "0.00", message = "Score must be between 0 and 100.")
         @DecimalMax(value = "100.00", message = "Score must be between 0 and 100.")
-        @Digits(integer = 3, fraction = 2, message = "Score must have at most two decimal places.")
+        @Digits(integer = 3, fraction = 0, message = "Score must be a whole number.")
         private BigDecimal score;
         @Size(max = 500, message = "Text answer must not exceed 500 characters.")
         private String textAnswer;
         @Size(max = 500, message = "Feedback must not exceed 500 characters.")
         private String feedback;
-        @Size(max = 500, message = "Correct feedback must not exceed 500 characters.")
-        private String correctFeedback;
-        @Size(max = 500, message = "Incorrect feedback must not exceed 500 characters.")
-        private String incorrectFeedback;
-        @DecimalMin(value = "0.00", message = "Correct score must be between 0 and 100.")
-        @DecimalMax(value = "100.00", message = "Correct score must be between 0 and 100.")
-        private BigDecimal correctScore;
-        @DecimalMin(value = "0.00", message = "Incorrect score must be between 0 and 100.")
-        @DecimalMax(value = "100.00", message = "Incorrect score must be between 0 and 100.")
-        private BigDecimal incorrectScore;
         private Boolean hidden;
         @Valid
         @Builder.Default
@@ -152,22 +153,12 @@ public final class QuestionBankDto {
         private ScoringType scoringType;
         @DecimalMin(value = "0.00", message = "Score must be between 0 and 100.")
         @DecimalMax(value = "100.00", message = "Score must be between 0 and 100.")
-        @Digits(integer = 3, fraction = 2, message = "Score must have at most two decimal places.")
+        @Digits(integer = 3, fraction = 0, message = "Score must be a whole number.")
         private BigDecimal score;
         @Size(max = 500, message = "Text answer must not exceed 500 characters.")
         private String textAnswer;
         @Size(max = 500, message = "Feedback must not exceed 500 characters.")
         private String feedback;
-        @Size(max = 500, message = "Correct feedback must not exceed 500 characters.")
-        private String correctFeedback;
-        @Size(max = 500, message = "Incorrect feedback must not exceed 500 characters.")
-        private String incorrectFeedback;
-        @DecimalMin(value = "0.00", message = "Correct score must be between 0 and 100.")
-        @DecimalMax(value = "100.00", message = "Correct score must be between 0 and 100.")
-        private BigDecimal correctScore;
-        @DecimalMin(value = "0.00", message = "Incorrect score must be between 0 and 100.")
-        @DecimalMax(value = "100.00", message = "Incorrect score must be between 0 and 100.")
-        private BigDecimal incorrectScore;
         private Boolean hidden;
         @Valid
         @Builder.Default
@@ -188,7 +179,7 @@ public final class QuestionBankDto {
         private Boolean correct;
         @DecimalMin(value = "0.00", message = "Option points must be between 0 and 100.")
         @DecimalMax(value = "100.00", message = "Option points must be between 0 and 100.")
-        @Digits(integer = 3, fraction = 2, message = "Option points must have at most two decimal places.")
+        @Digits(integer = 3, fraction = 0, message = "Option points must be a whole number.")
         private BigDecimal optionPoints;
     }
 
@@ -202,7 +193,7 @@ public final class QuestionBankDto {
         private Boolean correct;
         @DecimalMin(value = "0.00", message = "Option points must be between 0 and 100.")
         @DecimalMax(value = "100.00", message = "Option points must be between 0 and 100.")
-        @Digits(integer = 3, fraction = 2, message = "Option points must have at most two decimal places.")
+        @Digits(integer = 3, fraction = 0, message = "Option points must be a whole number.")
         private BigDecimal optionPoints;
         @NotNull(message = "Version is required.")
         @PositiveOrZero(message = "Version must be zero or greater.")
@@ -329,14 +320,6 @@ public final class QuestionBankDto {
         private String textAnswer = "";
         @Builder.Default
         private String feedback = "";
-        @Builder.Default
-        private String correctFeedback = "";
-        @Builder.Default
-        private String incorrectFeedback = "";
-        @Builder.Default
-        private BigDecimal correctScore = BigDecimal.ZERO;
-        @Builder.Default
-        private BigDecimal incorrectScore = BigDecimal.ZERO;
         private boolean hidden;
         private Integer position;
         @Builder.Default
@@ -388,6 +371,8 @@ public final class QuestionBankDto {
         private String description;
         private Long courseId;
         private String courseName;
+        private BigDecimal passPercentage;
+        private Integer maxAttempts;
         private Long createdByUserId;
         private String createdByEmail;
         private int sectionCount;
@@ -407,6 +392,8 @@ public final class QuestionBankDto {
         private String description;
         private Long courseId;
         private String courseName;
+        private BigDecimal passPercentage;
+        private Integer maxAttempts;
         private Long createdByUserId;
         private String createdByEmail;
         private List<SectionData> sections;

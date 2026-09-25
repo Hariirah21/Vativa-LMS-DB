@@ -20,6 +20,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -58,6 +59,12 @@ public class QuestionBankEntity {
 
     @Column(length = 1000)
     private String description;
+
+    @Column(name = "pass_percentage", precision = 5, scale = 2)
+    private BigDecimal passPercentage;
+
+    @Column(name = "max_attempts")
+    private Integer maxAttempts;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "course_id", foreignKey = @ForeignKey(name = "fk_question_bank_course"))

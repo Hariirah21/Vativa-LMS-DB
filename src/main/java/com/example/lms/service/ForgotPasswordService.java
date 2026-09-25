@@ -22,6 +22,9 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class ForgotPasswordService {
 
+    private static final String INVALID_RESET_LINK_MESSAGE =
+            "The password reset link is invalid or expired. Please request a new one.";
+
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository tokenRepository;
     private final PasswordEncoder passwordEncoder;
@@ -36,6 +39,20 @@ public class ForgotPasswordService {
 
     @Value("${reset-link.base-url}")
     private String resetLinkBaseUrl;
+
+    @Transactional(readOnly = true)
+    public void validateResetToken(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new ApiException(INVALID_RESET_LINK_MESSAGE, HttpStatus.GONE);
+        }
+
+        PasswordResetToken resetToken = tokenRepository.findByTokenHash(TokenGenerator.hash(rawToken))
+                .orElseThrow(() -> new ApiException(INVALID_RESET_LINK_MESSAGE, HttpStatus.GONE));
+
+        if (Boolean.TRUE.equals(resetToken.getUsed()) || resetToken.isExpired()) {
+            throw new ApiException(INVALID_RESET_LINK_MESSAGE, HttpStatus.GONE);
+        }
+    }
 
     @Transactional
     public void sendResetLink(ForgotPasswordDto.SendResetLinkRequest request) {

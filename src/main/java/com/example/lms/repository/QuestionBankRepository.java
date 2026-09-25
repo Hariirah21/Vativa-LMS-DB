@@ -20,18 +20,6 @@ public interface QuestionBankRepository extends JpaRepository<QuestionBankEntity
     Page<QuestionBankEntity> searchAll(@Param("search") String search, Pageable pageable);
 
     @EntityGraph(attributePaths = {"course", "createdBy"})
-    @Query("""
-            SELECT qb FROM QuestionBankEntity qb
-            WHERE qb.createdBy.id = :creatorId
-              AND (:search IS NULL OR LOWER(qb.name) LIKE LOWER(CONCAT('%', :search, '%')))
-            """)
-    Page<QuestionBankEntity> searchByCreator(
-            @Param("creatorId") Long creatorId,
-            @Param("search") String search,
-            Pageable pageable
-    );
-
-    @EntityGraph(attributePaths = {"course", "createdBy"})
     @Query("SELECT qb FROM QuestionBankEntity qb WHERE qb.id = :id")
     Optional<QuestionBankEntity> findWithReferencesById(@Param("id") Long id);
 
@@ -39,5 +27,11 @@ public interface QuestionBankRepository extends JpaRepository<QuestionBankEntity
     Optional<QuestionBankEntity> findByCreatedByIdAndIdempotencyKey(
             Long createdById,
             String idempotencyKey
+    );
+
+    @EntityGraph(attributePaths = {"course", "createdBy"})
+    Optional<QuestionBankEntity> findFirstByCreatedByIdAndRequestHashOrderByCreatedAtAsc(
+            Long createdById,
+            String requestHash
     );
 }

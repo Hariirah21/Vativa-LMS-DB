@@ -38,6 +38,27 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
+    @ExceptionHandler(CourseListLoadException.class)
+    public ResponseEntity<ApiResponse<Void>> handleCourseListLoad(CourseListLoadException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(
+                        "Unable to load courses. Please try again later."));
+    }
+
+    @ExceptionHandler(EnrollmentOperationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleEnrollmentOperation(EnrollmentOperationException ex) {
+        String message = switch (ex.getOperation()) {
+            case LIST_LOADING ->
+                    "Unable to load the Enrolled Course List. Please try again later.";
+            case ENROLLMENT ->
+                    "Unable to enroll the selected users. No partial enrollment was created. Please try again later.";
+            case UNENROLLMENT ->
+                    "Unable to unenroll the selected users. Existing enrollment status was retained. Please try again later.";
+        };
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(message));
+    }
+
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<ApiResponse<Void>> handleRateLimitExceeded(RateLimitExceededException ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
