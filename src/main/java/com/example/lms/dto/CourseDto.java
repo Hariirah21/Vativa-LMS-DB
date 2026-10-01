@@ -22,16 +22,20 @@ public class CourseDto {
     public static class CourseRequest {
 
         @NotBlank(message = "Course Name is required.")
+        @Size(max = 255, message = "Course Name must not exceed 255 characters.")
         private String name;
 
-        @NotBlank(message = "Course Category is required")
-        private String category;
+        @Size(max = 100, message = "Course Code must not exceed 100 characters.")
+        private String courseCode;
 
-        @NotNull(message = "Instructor selection is required")
+        @NotNull(message = "Course Category is required.")
+        private Long categoryId;
+
+        @NotNull(message = "Instructor selection is required.")
         private Long instructorId;
 
-        @NotBlank(message = "Course Level is required")
-        private String courseLevel;
+        @NotBlank(message = "Course Level is required.")
+        private String level;
 
         // Optional per SRS - max 1000 characters
         @Size(max = 1000, message = "Course Description must not exceed 1000 characters")
@@ -49,9 +53,15 @@ public class CourseDto {
     public static class CourseResponse {
         private Long id;
         private String name;
-        private String category;
+        private String courseCode;
+        private Long categoryId;
+        private String categoryName;
+        private String categoryDescription;
+        private Boolean categoryActive;
         private Long instructorId;
-        private String courseLevel;
+        private String instructorName;
+        private String instructorEmail;
+        private String level;
         private String description;
         private String thumbnailUrl;
         private LocalDateTime createdAt;

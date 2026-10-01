@@ -8,6 +8,14 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/**
+ * Represents a registered LMS user.
+ *
+ * Business rule (confirmed by product owner, not present in the original
+ * SRS document): every account created through Sign Up is stored with
+ * role = "ADMIN". This is enforced in SignUpService, never taken from
+ * client input.
+ */
 @Entity
 @Table(name = "users", uniqueConstraints = {
         @UniqueConstraint(columnNames = "email")
@@ -28,7 +36,7 @@ public class User {
     @Column(name = "last_name", nullable = false, length = 50)
     private String lastName;
 
-    @Column(name = "email", nullable = false, unique = true, length = 100)
+    @Column(name = "email", nullable = false, unique = true, length = 254)
     private String email;
 
     @Column(name = "country_code", nullable = false, length = 5)
@@ -40,7 +48,7 @@ public class User {
     @Column(name = "password", nullable = false)
     private String password;
 
-    @Column(name = "role", nullable = false, length = 20)
+    @Column(name = "role", nullable = false, length = 50)
     @Builder.Default
     private String role = "ADMIN";
 
@@ -51,25 +59,20 @@ public class User {
     @Builder.Default
     private Boolean active = true;
 
-    
     @Column(name = "package_id")
     private Long packageId;
 
-    
     @Column(name = "package_assigned_at")
     private LocalDateTime packageAssignedAt;
 
     @Column(name = "package_expires_at")
     private LocalDateTime packageExpiresAt;
 
-    
     @Column(name = "failed_login_attempts", nullable = false,
             columnDefinition = "integer not null default 0")
     @Builder.Default
     private Integer failedLoginAttempts = 0;
 
-    // NEW - set to "now + lockout duration" once failedLoginAttempts hits
-    // the configured threshold; cleared on successful login. Null = not locked.
     @Column(name = "locked_until")
     private LocalDateTime lockedUntil;
 
@@ -101,9 +104,6 @@ public class User {
         return lockedUntil != null && LocalDateTime.now().isBefore(lockedUntil);
     }
 
-    // NEW - convenience check used by permission-gating logic: a package
-    // with no expiry (packageExpiresAt == null) never counts as expired;
-    // otherwise it's expired once "now" passes that timestamp.
     @Transient
     public boolean isPackageExpired() {
         return packageExpiresAt != null && LocalDateTime.now().isAfter(packageExpiresAt);

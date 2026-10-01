@@ -6,8 +6,13 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 
-
+/**
+ * Generates the raw password-reset token (sent in the emailed link) and
+ * computes the SHA-256 hash of it (persisted in the database). Mirrors the
+ * "never store the secret in plaintext" principle used for passwords.
+ */
 public final class TokenGenerator {
+
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private TokenGenerator() {

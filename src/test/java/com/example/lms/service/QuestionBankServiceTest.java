@@ -34,7 +34,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -92,7 +91,8 @@ class QuestionBankServiceTest {
 
     @Test
     void createsValidSingleAnswerAndDefaultsScore() {
-        when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
+        when(userRepository.findByIdForQuestionBankCreation(owner.getId()))
+                .thenReturn(Optional.of(owner));
         QuestionBankDto.CreateRequest request = requestWithQuestion(
                 QuestionBankDto.QuestionType.SINGLE_ANSWER,
                 List.of(option("A", true), option("B", false)),
@@ -110,7 +110,8 @@ class QuestionBankServiceTest {
 
     @Test
     void rejectsSingleAnswerWithMultipleCorrectOptions() {
-        when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
+        when(userRepository.findByIdForQuestionBankCreation(owner.getId()))
+                .thenReturn(Optional.of(owner));
         QuestionBankDto.CreateRequest request = requestWithQuestion(
                 QuestionBankDto.QuestionType.SINGLE_ANSWER,
                 List.of(option("A", true), option("B", true)),
@@ -129,7 +130,8 @@ class QuestionBankServiceTest {
 
     @Test
     void acceptsMultipleAnswerWithOneOrMoreCorrectOptions() {
-        when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
+        when(userRepository.findByIdForQuestionBankCreation(owner.getId()))
+                .thenReturn(Optional.of(owner));
         QuestionBankDto.CreateRequest request = requestWithQuestion(
                 QuestionBankDto.QuestionType.MULTIPLE_ANSWER,
                 List.of(option("A", true), option("B", true), option("C", false)),
@@ -144,7 +146,8 @@ class QuestionBankServiceTest {
 
     @Test
     void rejectsShortTextWithChoiceOptions() {
-        when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
+        when(userRepository.findByIdForQuestionBankCreation(owner.getId()))
+                .thenReturn(Optional.of(owner));
         QuestionBankDto.CreateRequest request = requestWithQuestion(
                 QuestionBankDto.QuestionType.SHORT_TEXT,
                 List.of(option("Not allowed", true)),
@@ -162,7 +165,8 @@ class QuestionBankServiceTest {
 
     @Test
     void enforcesTextLimitsAndScoreBoundaries() {
-        when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
+        when(userRepository.findByIdForQuestionBankCreation(owner.getId()))
+                .thenReturn(Optional.of(owner));
         QuestionBankDto.CreateRequest tooLong = requestWithQuestion(
                 null, List.of(), BigDecimal.ZERO);
         tooLong.getQuestions().get(0).setQuestionText("x".repeat(501));
@@ -185,15 +189,15 @@ class QuestionBankServiceTest {
     }
 
     @Test
-    void appliesRoleAndInstructorOwnershipRules() throws Exception {
+    void allowsAdminAndInstructorManagementButRejectsOtherRoles() throws Exception {
         QuestionBankDto.Content content = QuestionBankDto.Content.builder().build();
         QuestionBankEntity bank = bank(5L, 0L, owner, content);
         when(questionBankRepository.findWithReferencesById(5L)).thenReturn(Optional.of(bank));
 
-        assertThrows(
-                AccessDeniedException.class,
-                () -> service.get(5L, new AuthPrincipal(20L, "other@example.com", "INSTRUCTOR"))
-        );
+        QuestionBankDto.Response instructorResult =
+                service.get(5L, new AuthPrincipal(20L, "other@example.com", "INSTRUCTOR"));
+        assertEquals(5L, instructorResult.getId());
+
         assertThrows(
                 AccessDeniedException.class,
                 () -> service.get(5L, new AuthPrincipal(30L, "learner@example.com", "LEARNER"))
@@ -206,7 +210,8 @@ class QuestionBankServiceTest {
 
     @Test
     void replaysIdempotentCreateWithoutSecondInsert() {
-        when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
+        when(userRepository.findByIdForQuestionBankCreation(owner.getId()))
+                .thenReturn(Optional.of(owner));
         AtomicReference<QuestionBankEntity> stored = new AtomicReference<>();
         when(questionBankRepository.findByCreatedByIdAndIdempotencyKey(
                 owner.getId(), "save-once"))

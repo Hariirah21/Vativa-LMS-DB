@@ -10,7 +10,13 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "courses")
+@Table(
+        name = "courses",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_course_name",
+                columnNames = "name"
+        )
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,17 +28,20 @@ public class CourseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 255)
+    @Column(nullable = false, length = 255)
     private String name;
 
-    @Column(name = "category")
-    private String category;
+    @Column(name = "course_code", length = 100)
+    private String courseCode;
 
-    @Column(name = "instructor_id")
+    @Column(name = "category_id", nullable = false)
+    private Long categoryId;
+
+    @Column(name = "instructor_id", nullable = false)
     private Long instructorId;
 
-    @Column(name = "course_level")
-    private String courseLevel;
+    @Column(name = "course_level", nullable = false)
+    private String level;
 
     // Optional per SRS - max 1000 characters
     @Column(name = "description", length = 1000)

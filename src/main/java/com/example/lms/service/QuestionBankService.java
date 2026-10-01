@@ -1,39 +1,12 @@
 package com.example.lms.service;
 
-import com.example.lms.config.AuthPrincipal;
-import com.example.lms.dto.QuestionBankDto;
-import com.example.lms.entity.CourseEntity;
-import com.example.lms.entity.QuestionBankEntity;
-import com.example.lms.entity.User;
-import com.example.lms.exception.QuestionBankException;
-import com.example.lms.repository.CourseRepository;
-import com.example.lms.repository.QuestionBankRepository;
-import com.example.lms.repository.UserRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpStatus;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.web.multipart.MultipartFile;
-
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.BufferedReader;
-import java.io.StringReader;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
@@ -52,6 +25,33 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.example.lms.config.AuthPrincipal;
+import com.example.lms.dto.QuestionBankDto;
+import com.example.lms.entity.CourseEntity;
+import com.example.lms.entity.QuestionBankEntity;
+import com.example.lms.entity.User;
+import com.example.lms.exception.QuestionBankException;
+import com.example.lms.repository.CourseRepository;
+import com.example.lms.repository.QuestionBankRepository;
+import com.example.lms.repository.UserRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import lombok.RequiredArgsConstructor;
+
 @Service
 @RequiredArgsConstructor
 public class QuestionBankService {
@@ -60,7 +60,7 @@ public class QuestionBankService {
     private static final Set<String> ALLOWED_EXTENSIONS =
             Set.of("pdf", "doc", "docx", "csv", "xls", "xlsx");
     private static final Set<String> MANAGER_ROLES =
-            Set.of("ADMIN", "SUPER_ADMIN", "INSTRUCTOR");
+            Set.of("ADMIN", "INSTRUCTOR");
     private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
 
@@ -94,6 +94,9 @@ public class QuestionBankService {
         requireManager(principal);
         String idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey);
         String requestHash = hashRequest(request);
+        User creator = userRepository.findByIdForQuestionBankCreation(principal.getId())
+                .orElseThrow(() -> new QuestionBankException(
+                        "Authenticated user no longer exists.", HttpStatus.UNAUTHORIZED));
 
         if (idempotencyKey != null) {
             QuestionBankEntity existing = questionBankRepository
@@ -107,18 +110,26 @@ public class QuestionBankService {
             }
         }
 
-        User creator = userRepository.findById(principal.getId())
-                .orElseThrow(() -> new QuestionBankException(
-                        "Authenticated user no longer exists.", HttpStatus.UNAUTHORIZED));
+        QuestionBankEntity duplicate = questionBankRepository
+                .findFirstByCreatedByIdAndRequestHashOrderByCreatedAtAsc(
+                        principal.getId(), requestHash)
+                .orElse(null);
+        if (duplicate != null) {
+            return new CreateResult(toResponse(duplicate, readContent(duplicate)), true);
+        }
+
         QuestionBankDto.Content content = buildInitialContent(request);
         QuestionBankEntity bank = new QuestionBankEntity();
         bank.setName(normalizeBankName(request.getName()));
         bank.setDescription(normalizeDescription(request.getDescription()));
         bank.setCourse(resolveCourse(request.getCourseId()));
+        validateQuizConfiguration(request.getPassPercentage(), request.getMaxAttempts());
+        bank.setPassPercentage(request.getPassPercentage());
+        bank.setMaxAttempts(request.getMaxAttempts());
         bank.setCreatedBy(creator);
         bank.setContentJson(writeContent(content));
         bank.setIdempotencyKey(idempotencyKey);
-        bank.setRequestHash(idempotencyKey == null ? null : requestHash);
+        bank.setRequestHash(requestHash);
 
         try {
             bank = questionBankRepository.saveAndFlush(bank);
@@ -145,9 +156,8 @@ public class QuestionBankService {
         String search = normalizeSearch(rawSearch);
         PageRequest pageable = PageRequest.of(
                 page, size, Sort.by(Sort.Direction.DESC, "updatedAt", "id"));
-        Page<QuestionBankEntity> result = isAdmin(principal)
-                ? questionBankRepository.searchAll(search, pageable)
-                : questionBankRepository.searchByCreator(principal.getId(), search, pageable);
+        Page<QuestionBankEntity> result =
+                questionBankRepository.searchAll(search, pageable);
         List<QuestionBankDto.SummaryResponse> summaries = result.getContent().stream()
                 .map(bank -> toSummary(bank, readContent(bank)))
                 .toList();
@@ -180,6 +190,9 @@ public class QuestionBankService {
         bank.setName(normalizeBankName(request.getName()));
         bank.setDescription(normalizeDescription(request.getDescription()));
         bank.setCourse(resolveCourse(request.getCourseId()));
+        validateQuizConfiguration(request.getPassPercentage(), request.getMaxAttempts());
+        bank.setPassPercentage(request.getPassPercentage());
+        bank.setMaxAttempts(request.getMaxAttempts());
         return persist(bank, readContent(bank));
     }
 
@@ -690,7 +703,7 @@ public class QuestionBankService {
         String extension = extensionOf(sanitizedFilename);
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
             throw new QuestionBankException(
-                    "Unsupported file format. Allowed formats: PDF, DOC, DOCX, CSV, XLS, XLSX.",
+                    "Invalid file type.",
                     HttpStatus.UNSUPPORTED_MEDIA_TYPE
             );
         }
@@ -807,10 +820,6 @@ public class QuestionBankService {
                                 .score(parseDecimal(csvValue(row, headers, "score"), "score"))
                                 .textAnswer(csvValue(row, headers, "text_answer"))
                                 .feedback(csvValue(row, headers, "feedback"))
-                                .correctFeedback(csvValue(row, headers, "correct_feedback"))
-                                .incorrectFeedback(csvValue(row, headers, "incorrect_feedback"))
-                                .correctScore(parseDecimal(csvValue(row, headers, "correct_score"), "correct_score"))
-                                .incorrectScore(parseDecimal(csvValue(row, headers, "incorrect_score"), "incorrect_score"))
                                 .position(nextQuestionPosition(content, sectionId))
                                 .build());
                 String optionText = csvValue(row, headers, "option_text");
@@ -1040,10 +1049,6 @@ public class QuestionBankService {
                     .score(input.getScore())
                     .textAnswer(input.getTextAnswer())
                     .feedback(input.getFeedback())
-                    .correctFeedback(input.getCorrectFeedback())
-                    .incorrectFeedback(input.getIncorrectFeedback())
-                    .correctScore(input.getCorrectScore())
-                    .incorrectScore(input.getIncorrectScore())
                     .hidden(input.getHidden())
                     .options(input.getOptions())
                     .version(0L)
@@ -1096,10 +1101,6 @@ public class QuestionBankService {
                 .score(defaultNumber(request.getScore()))
                 .textAnswer(defaultString(request.getTextAnswer()))
                 .feedback(defaultString(request.getFeedback()))
-                .correctFeedback(defaultString(request.getCorrectFeedback()))
-                .incorrectFeedback(defaultString(request.getIncorrectFeedback()))
-                .correctScore(defaultNumber(request.getCorrectScore()))
-                .incorrectScore(defaultNumber(request.getIncorrectScore()))
                 .hidden(Boolean.TRUE.equals(request.getHidden()))
                 .position(existing == null ? null : existing.getPosition())
                 .options(options)
@@ -1143,10 +1144,6 @@ public class QuestionBankService {
                 .score(source.getScore())
                 .textAnswer(source.getTextAnswer())
                 .feedback(source.getFeedback())
-                .correctFeedback(source.getCorrectFeedback())
-                .incorrectFeedback(source.getIncorrectFeedback())
-                .correctScore(source.getCorrectScore())
-                .incorrectScore(source.getIncorrectScore())
                 .hidden(source.isHidden())
                 .position(source.getPosition())
                 .options(optionCopies)
@@ -1157,11 +1154,7 @@ public class QuestionBankService {
         assertLength(question.getQuestionText(), 500, "Question text");
         assertLength(question.getTextAnswer(), 500, "Text answer");
         assertLength(question.getFeedback(), 500, "Feedback");
-        assertLength(question.getCorrectFeedback(), 500, "Correct feedback");
-        assertLength(question.getIncorrectFeedback(), 500, "Incorrect feedback");
         assertRange(question.getScore(), "Score");
-        assertRange(question.getCorrectScore(), "Correct score");
-        assertRange(question.getIncorrectScore(), "Incorrect score");
 
         List<QuestionBankDto.OptionData> options =
                 question.getOptions() == null ? List.of() : question.getOptions();
@@ -1381,10 +1374,6 @@ public class QuestionBankService {
                 question.setScore(defaultNumber(question.getScore()));
                 question.setTextAnswer(defaultString(question.getTextAnswer()));
                 question.setFeedback(defaultString(question.getFeedback()));
-                question.setCorrectFeedback(defaultString(question.getCorrectFeedback()));
-                question.setIncorrectFeedback(defaultString(question.getIncorrectFeedback()));
-                question.setCorrectScore(defaultNumber(question.getCorrectScore()));
-                question.setIncorrectScore(defaultNumber(question.getIncorrectScore()));
                 if (question.getOptions() == null) {
                     question.setOptions(new ArrayList<>());
                 }
@@ -1512,16 +1501,6 @@ public class QuestionBankService {
 
     private void requireAccess(QuestionBankEntity bank, AuthPrincipal principal) {
         requireManager(principal);
-        if (!isAdmin(principal)
-                && !Objects.equals(bank.getCreatedBy().getId(), principal.getId())) {
-            throw new AccessDeniedException(
-                    "Instructors may manage only the Question Banks they created.");
-        }
-    }
-
-    private boolean isAdmin(AuthPrincipal principal) {
-        String role = principal.getRole().toUpperCase(Locale.ROOT);
-        return "ADMIN".equals(role) || "SUPER_ADMIN".equals(role);
     }
 
     private CourseEntity resolveCourse(Long courseId) {
@@ -1543,6 +1522,8 @@ public class QuestionBankService {
                 .description(bank.getDescription())
                 .courseId(bank.getCourse() == null ? null : bank.getCourse().getId())
                 .courseName(bank.getCourse() == null ? null : bank.getCourse().getName())
+                .passPercentage(bank.getPassPercentage())
+                .maxAttempts(bank.getMaxAttempts())
                 .createdByUserId(bank.getCreatedBy().getId())
                 .createdByEmail(bank.getCreatedBy().getEmail())
                 .sections(content.getSections())
@@ -1564,6 +1545,8 @@ public class QuestionBankService {
                 .description(bank.getDescription())
                 .courseId(bank.getCourse() == null ? null : bank.getCourse().getId())
                 .courseName(bank.getCourse() == null ? null : bank.getCourse().getName())
+                .passPercentage(bank.getPassPercentage())
+                .maxAttempts(bank.getMaxAttempts())
                 .createdByUserId(bank.getCreatedBy().getId())
                 .createdByEmail(bank.getCreatedBy().getEmail())
                 .sectionCount(content.getSections().size())
@@ -1598,6 +1581,18 @@ public class QuestionBankService {
 
     private String normalizeDescription(String rawDescription) {
         return rawDescription == null ? null : rawDescription.trim();
+    }
+
+    private void validateQuizConfiguration(BigDecimal passPercentage, Integer maxAttempts) {
+        if (passPercentage != null
+                && (passPercentage.compareTo(ZERO) < 0
+                || passPercentage.compareTo(ONE_HUNDRED) > 0
+                || passPercentage.scale() > 2)) {
+            throw badRequest("Pass percentage must be between 0 and 100 with at most two decimal places.");
+        }
+        if (maxAttempts != null && maxAttempts < 1) {
+            throw badRequest("Maximum attempts must be greater than zero.");
+        }
     }
 
     private String normalizeSearch(String rawSearch) {

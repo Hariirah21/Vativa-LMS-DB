@@ -4,118 +4,122 @@ import com.example.lms.dto.RoleDto;
 import com.example.lms.entity.RoleEntity;
 import com.example.lms.exception.ApiException;
 import com.example.lms.repository.RoleRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
 
 import java.util.List;
-import java.util.Set;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class RoleService {
 
-    private static final Set<String> VALID_STATUSES = Set.of("Active", "Inactive");
-
     private final RoleRepository roleRepository;
+    private final List<String> acceptedRoleNames;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public RoleService(
+            RoleRepository roleRepository,
+            @Value("${app.roles.accepted}") List<String> acceptedRoleNames) {
+        this.roleRepository = roleRepository;
+        this.acceptedRoleNames = acceptedRoleNames.stream()
+                .map(String::trim)
+                .filter(name -> !name.isEmpty())
+                .distinct()
+                .toList();
+    }
 
     @Transactional
     public RoleDto.Response createRole(Long adminId, RoleDto.Request request) {
-        // SRS: "Role names must be unique in the system" — checked globally,
-        // not per-admin, since roles (Admin/Instructor/Learner/etc.) are
-        // shared system-wide, not private to the admin who created them.
-        if (roleRepository.existsByNameIgnoreCase(request.getName())) {
+        String name = request.getName().trim();
+        validatePermissions(request);
+        RoleEntity existing = roleRepository.findByNameIgnoreCaseAndCreatedByAdminId(name, adminId).orElse(null);
+        if (existing != null && !isLegacyPlaceholder(existing)) {
             throw new ApiException("Role already exists.", HttpStatus.CONFLICT);
         }
-
-        RoleEntity entity = new RoleEntity();
-        entity.setCreatedByAdminId(adminId);
-        entity.setStatus("Active"); // SRS: "Role Status defaults to Active when creating a new role"
+        RoleEntity entity = existing != null ? existing : new RoleEntity();
+        if (existing == null) entity.setCreatedByAdminId(adminId);
+        entity.setStatus("Active");
         mapRequestToEntity(request, entity);
-
-        try {
-            return mapEntityToResponse(roleRepository.save(entity));
-        } catch (DataIntegrityViolationException e) {
-            // Belt-and-braces against the race where two admins submit the
-            // same new Role Name at the same instant (SRS edge case: both
-            // requests pass the existsByNameIgnoreCase() check above before
-            // either commits). The DB's unique constraint on `name` is what
-            // actually stops the second insert.
-            throw new ApiException("Role already exists.", HttpStatus.CONFLICT);
-        }
+        return mapEntityToResponse(roleRepository.save(entity));
     }
 
     @Transactional
-    public RoleDto.Response updateRole(Long id, RoleDto.Request request) {
-        RoleEntity entity = roleRepository.findById(id)
+    public RoleDto.Response updateRole(Long adminId, Long id, RoleDto.Request request) {
+        RoleEntity entity = roleRepository.findByIdAndCreatedByAdminId(id, adminId)
                 .orElseThrow(() -> new ApiException("Role not found.", HttpStatus.NOT_FOUND));
+        validatePermissions(request);
 
         if (!entity.getName().equalsIgnoreCase(request.getName())
-                && roleRepository.existsByNameIgnoreCaseAndIdNot(request.getName(), id)) {
+                && roleRepository.existsByNameIgnoreCaseAndCreatedByAdminId(request.getName(), adminId)) {
             throw new ApiException("Role already exists.", HttpStatus.CONFLICT);
         }
 
         mapRequestToEntity(request, entity);
-
-        try {
-            return mapEntityToResponse(roleRepository.save(entity));
-        } catch (DataIntegrityViolationException e) {
-            throw new ApiException("Role already exists.", HttpStatus.CONFLICT);
-        }
+        return mapEntityToResponse(roleRepository.save(entity));
     }
 
-    public RoleDto.Response getRoleById(Long id) {
-        RoleEntity entity = roleRepository.findById(id)
+    public RoleDto.Response getRoleById(Long adminId, Long id) {
+        RoleEntity entity = roleRepository.findByIdAndCreatedByAdminId(id, adminId)
                 .orElseThrow(() -> new ApiException("Role not found.", HttpStatus.NOT_FOUND));
         return mapEntityToResponse(entity);
     }
 
     // Full list — used in the Admin's Role Management / list screen (all statuses)
-    public List<RoleDto.Response> getAllRoles() {
-        return roleRepository.findAll().stream()
+    @Transactional
+    public List<RoleDto.Response> getAllRoles(Long adminId) {
+        return roleRepository.findAllByCreatedByAdminId(adminId).stream()
+                .filter(role -> !isLegacyPlaceholder(role))
                 .map(this::mapEntityToResponse)
                 .collect(Collectors.toList());
     }
 
     // SRS: "Available Roles dropdown displays all active roles" — used for the dropdown specifically
-    public List<RoleDto.Response> getActiveRoles() {
-        return roleRepository.findAllByStatus("Active").stream()
+    @Transactional
+    public List<RoleDto.Response> getActiveRoles(Long adminId) {
+        return roleRepository.findAllByCreatedByAdminIdAndStatus(adminId, "Active").stream()
+                .filter(role -> !isLegacyPlaceholder(role))
                 .map(this::mapEntityToResponse)
                 .collect(Collectors.toList());
     }
 
     @Transactional
-    public RoleDto.Response updateStatus(Long id, String status) {
-        if (status == null || !VALID_STATUSES.contains(status)) {
-            throw new ApiException("Status must be either 'Active' or 'Inactive'.", HttpStatus.BAD_REQUEST);
-        }
-        RoleEntity entity = roleRepository.findById(id)
+    public RoleDto.Response updateStatus(Long adminId, Long id, String status) {
+        RoleEntity entity = roleRepository.findByIdAndCreatedByAdminId(id, adminId)
                 .orElseThrow(() -> new ApiException("Role not found.", HttpStatus.NOT_FOUND));
-        entity.setStatus(status);
+        String normalizedStatus = status.trim();
+        if (!"Active".equalsIgnoreCase(normalizedStatus)
+                && !"Inactive".equalsIgnoreCase(normalizedStatus)) {
+            throw new ApiException(
+                    "Status must be Active or Inactive.",
+                    HttpStatus.BAD_REQUEST);
+        }
+        entity.setStatus("Active".equalsIgnoreCase(normalizedStatus) ? "Active" : "Inactive");
         return mapEntityToResponse(roleRepository.save(entity));
     }
 
     @Transactional
-    public void deleteRole(Long id) {
-        if (!roleRepository.existsById(id)) {
+    public void deleteRole(Long adminId, Long id) {
+        if (!roleRepository.existsByIdAndCreatedByAdminId(id, adminId)) {
             throw new ApiException("Role not found.", HttpStatus.NOT_FOUND);
         }
         roleRepository.deleteById(id);
     }
 
     private void mapRequestToEntity(RoleDto.Request request, RoleEntity entity) {
-        entity.setName(request.getName());
+        entity.setName(request.getName().trim());
         entity.setDescription(request.getDescription());
         try {
             entity.setPermissionsJson(objectMapper.writeValueAsString(request.getPermissions()));
-        } catch (Exception e) {
-            throw new ApiException("Failed to save role permissions.", HttpStatus.INTERNAL_SERVER_ERROR);
+        } catch (JsonProcessingException e) {
+            throw new ApiException(
+                    "Permissions could not be saved.",
+                    HttpStatus.BAD_REQUEST);
         }
     }
 
@@ -133,9 +137,38 @@ public class RoleService {
                         entity.getPermissionsJson(),
                         new TypeReference<List<com.example.lms.dto.PackageDto.Category>>() {}));
             }
-        } catch (Exception e) {
-            throw new ApiException("Failed to load role permissions.", HttpStatus.INTERNAL_SERVER_ERROR);
+        } catch (JsonProcessingException e) {
+            throw new ApiException(
+                    "Stored permissions are invalid.",
+                    HttpStatus.INTERNAL_SERVER_ERROR);
         }
         return response;
+    }
+
+    private void validatePermissions(RoleDto.Request request) {
+        boolean selected = request.getPermissions() != null
+                && request.getPermissions().stream()
+                .filter(category -> category.getFeatures() != null)
+                .flatMap(category -> category.getFeatures().stream())
+                .map(com.example.lms.dto.PackageDto.Feature::getPermissions)
+                .filter(permission -> permission != null)
+                .anyMatch(permission -> permission.isCreate()
+                        || permission.isRead()
+                        || permission.isUpdate()
+                        || permission.isDelete());
+        if (!selected) {
+            throw new ApiException(
+                    "Select at least one permission before saving the role.",
+                    HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private boolean isLegacyPlaceholder(RoleEntity role) {
+        boolean catalogName = acceptedRoleNames.stream()
+                .anyMatch(name -> name.toLowerCase(Locale.ROOT)
+                        .equals(role.getName().trim().toLowerCase(Locale.ROOT)));
+        boolean emptyPermissions = role.getPermissionsJson() == null
+                || role.getPermissionsJson().trim().equals("[]");
+        return catalogName && role.getDescription() == null && emptyPermissions;
     }
 }

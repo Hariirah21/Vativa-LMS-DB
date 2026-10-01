@@ -6,7 +6,6 @@ import com.example.lms.entity.User;
 import com.example.lms.exception.ApiException;
 import com.example.lms.repository.PasswordResetTokenRepository;
 import com.example.lms.repository.UserRepository;
-import com.example.lms.util.CommonPasswordChecker;
 import com.example.lms.util.TokenGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,18 +16,32 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
-
+/**
+ * Business logic for 03__US_Forgot_Password, matching the SRS reset-link
+ * flow (no OTP):
+ *
+ *  1) sendResetLink  - validates the email is registered, generates a
+ *                       random token, stores its hash with an expiry,
+ *                       emails a reset link containing the raw token.
+ *  2) resetPassword  - looks the token up by its hash, checks it is
+ *                       neither expired nor already used, updates the
+ *                       password, and marks the token used (single-use).
+ *
+ * Note: unlike the OTP version, there is no separate "verify" endpoint -
+ * clicking the emailed link and landing on the Reset Password page IS the
+ * verification step (SRS step 6-7). Verification happens implicitly at
+ * resetPassword() time by validating the token.
+ */
 @Service
 @RequiredArgsConstructor
 public class ForgotPasswordService {
 
+    private static final String INVALID_RESET_LINK_MESSAGE =
+            "The password reset link is invalid or expired. Please request a new one.";
+
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository tokenRepository;
     private final PasswordEncoder passwordEncoder;
-    // CHANGED: was the concrete ResendEmailService - now the narrow
-    // PasswordResetEmailService interface, so this class doesn't depend on
-    // a specific email provider (Dependency Inversion) and is easier to
-    // unit-test with a mock.
     private final PasswordResetEmailService passwordResetEmailService;
 
     @Value("${reset-link.expiry-minutes}")
@@ -36,6 +49,20 @@ public class ForgotPasswordService {
 
     @Value("${reset-link.base-url}")
     private String resetLinkBaseUrl;
+
+    @Transactional(readOnly = true)
+    public void validateResetToken(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new ApiException(INVALID_RESET_LINK_MESSAGE, HttpStatus.GONE);
+        }
+        PasswordResetToken resetToken = tokenRepository
+                .findByTokenHash(TokenGenerator.hash(rawToken))
+                .orElseThrow(() -> new ApiException(
+                        INVALID_RESET_LINK_MESSAGE, HttpStatus.GONE));
+        if (Boolean.TRUE.equals(resetToken.getUsed()) || resetToken.isExpired()) {
+            throw new ApiException(INVALID_RESET_LINK_MESSAGE, HttpStatus.GONE);
+        }
+    }
 
     @Transactional
     public void sendResetLink(ForgotPasswordDto.SendResetLinkRequest request) {
@@ -58,7 +85,8 @@ public class ForgotPasswordService {
         tokenRepository.save(resetToken);
 
         String resetLink = resetLinkBaseUrl + "?token=" + rawToken;
-        passwordResetEmailService.sendResetLinkEmail(user.getEmail(), resetLink, expiryMinutes);
+        passwordResetEmailService.sendResetLinkEmail(
+                user.getEmail(), resetLink, expiryMinutes);
     }
 
     @Transactional
@@ -66,12 +94,6 @@ public class ForgotPasswordService {
 
         if (!request.getNewPassword().equals(request.getConfirmPassword())) {
             throw new ApiException("Passwords do not match.", HttpStatus.BAD_REQUEST);
-        }
-
-        // Same password policy as Sign Up: don't allow resetting into a
-        // commonly used password.
-        if (CommonPasswordChecker.isCommon(request.getNewPassword())) {
-            throw new ApiException("Password should not be a commonly used password.", HttpStatus.BAD_REQUEST);
         }
 
         String tokenHash = TokenGenerator.hash(request.getToken());

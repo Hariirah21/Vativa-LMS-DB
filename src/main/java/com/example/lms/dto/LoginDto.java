@@ -8,7 +8,11 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
 
+/**
+ * Request / Response payloads for the Login feature (02__US_Login).
+ */
 public class LoginDto {
 
     @Data
@@ -29,6 +33,10 @@ public class LoginDto {
         // Optional field from the Field List - not mandatory.
         // When true, LoginService issues a longer-lived JWT (see JwtUtil).
         private Boolean rememberMe;
+
+        public void setEmail(String email) {
+            this.email = email == null ? null : email.trim();
+        }
     }
 
     @Data
@@ -43,5 +51,7 @@ public class LoginDto {
         private String lastName;
         private String email;
         private String role;
+        private List<String> roles;
+        private Long instructorId;
     }
 }

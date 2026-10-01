@@ -1,0 +1,213 @@
+package com.example.lms;
+
+import com.example.lms.entity.User;
+import com.example.lms.repository.RoleRepository;
+import com.example.lms.repository.UserRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
+class StaffControllerIntegrationTests {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private RoleRepository roleRepository;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private User registeredUser;
+
+    @BeforeEach
+    void setUpUsers() {
+        roleRepository.deleteAll();
+        userRepository.deleteAll();
+        userRepository.save(User.builder()
+                .firstName("Test")
+                .lastName("Admin")
+                .email("admin@example.com")
+                .countryCode("+91")
+                .phoneNumber("9999999999")
+                .password("test-password")
+                .role("ADMIN")
+                .acceptedTerms(true)
+                .active(true)
+                .build());
+        registeredUser = userRepository.save(User.builder()
+                .firstName("Jane")
+                .lastName("Doe")
+                .email("jane@example.com")
+                .countryCode("+91")
+                .phoneNumber("8888888888")
+                .password("test-password")
+                .role("LEARNER")
+                .acceptedTerms(true)
+                .active(true)
+                .build());
+    }
+
+    @Test
+    void roleListStartsEmptyAndCreatedRoleSupportsCrud() throws Exception {
+        mockMvc.perform(get("/api/roles")
+                        .with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(0)));
+
+        String createdResponse = mockMvc.perform(post("/api/roles")
+                        .with(user("admin@example.com").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(roleBody("Course Reviewer")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.name").value("Course Reviewer"))
+                .andReturn().getResponse().getContentAsString();
+        long roleId = objectMapper.readTree(createdResponse).get("data").get("id").asLong();
+
+        mockMvc.perform(get("/api/roles").with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].name").value("Course Reviewer"));
+
+        mockMvc.perform(put("/api/roles/{id}", roleId)
+                        .with(user("admin@example.com").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(roleBody("Senior Course Reviewer")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Senior Course Reviewer"));
+
+        mockMvc.perform(delete("/api/roles/{id}", roleId)
+                        .with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/roles").with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data", hasSize(0)));
+    }
+
+    @Test
+    void applicationModulesComeFromTheModuleConfigurationDependency() throws Exception {
+        mockMvc.perform(get("/api/application-modules")
+                        .with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].name", hasItems(
+                        "Authentication",
+                        "Course Management",
+                        "Content Management",
+                        "Enrollment")));
+    }
+
+    @Test
+    void adminAssignsRolesToRegisteredUsersWithoutStaffMemberTable() throws Exception {
+        String createBody = requestBody("Jane Doe", "jane@example.com", "Instructor");
+
+        String createResponse = mockMvc.perform(post("/api/staff")
+                        .with(user("admin@example.com").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.id").value(registeredUser.getId()))
+                .andExpect(jsonPath("$.data.username").value("Jane Doe"))
+                .andExpect(jsonPath("$.data.role").value("Instructor"))
+                .andExpect(jsonPath("$.data.status").value("Active"))
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode created = objectMapper.readTree(createResponse).get("data");
+        long userId = created.get("id").asLong();
+        assertThat(roleRepository.existsByNameIgnoreCaseAndCreatedByAdminId(
+                "Instructor",
+                userRepository.findByEmailIgnoreCase("admin@example.com").orElseThrow().getId()))
+                .isTrue();
+
+        mockMvc.perform(get("/api/staff")
+                        .with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].email").value("jane@example.com"));
+
+        mockMvc.perform(put("/api/staff/{id}", userId)
+                        .with(user("admin@example.com").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody(
+                                "Jane Doe",
+                                "jane@example.com",
+                                "Content Manager")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.role").value("Content Manager"));
+
+        assertThat(userRepository.findById(userId).orElseThrow().getRole())
+                .isEqualTo("Content Manager");
+
+        mockMvc.perform(delete("/api/staff/{id}", userId)
+                        .with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isOk());
+
+        assertThat(userRepository.findById(userId).orElseThrow().getActive()).isFalse();
+    }
+
+    private String requestBody(String username, String email, String role) {
+        return """
+                {
+                  "username": "%s",
+                  "email": "%s",
+                  "role": "%s",
+                  "permissions": [
+                    {
+                      "id": "course-management",
+                      "name": "Course Management",
+                      "enabled": true,
+                      "features": [
+                        {
+                          "id": "create-course",
+                          "name": "Create Course",
+                          "permissions": {
+                            "create": true,
+                            "read": true,
+                            "update": false,
+                            "delete": false
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.formatted(username, email, role);
+    }
+
+    private String roleBody(String roleName) {
+        return """
+                {
+                  "name": "%s",
+                  "description": null,
+                  "permissions": [{
+                    "id": "course-management",
+                    "name": "Course Management",
+                    "enabled": true,
+                    "features": [{
+                      "id": "course-list",
+                      "name": "Course List",
+                      "permissions": {"create": false, "read": true, "update": false, "delete": false}
+                    }]
+                  }]
+                }
+                """.formatted(roleName);
+    }
+}

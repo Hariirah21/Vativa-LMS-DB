@@ -6,6 +6,7 @@ import com.example.lms.entity.SectionEntity;
 import com.example.lms.repository.CourseRepository;
 import com.example.lms.repository.SectionRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -98,13 +99,13 @@ public class SectionService {
         getCourseOrThrow(courseId);
         long total = sectionRepository.countByCourseId(courseId);
         if (total < 2) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+            throw new ResponseStatusException(HttpStatusCode.valueOf(422),
                     "Reordering requires at least two sections in the course.");
         }
 
         List<SectionEntity> allSections = sectionRepository.findByCourseIdOrderBySectionOrderAsc(courseId);
         Map<Long, SectionEntity> byId = allSections.stream()
-                .collect(Collectors.toMap(SectionEntity::getId, s -> s));
+                .collect(Collectors.toMap(section -> section.getId(), section -> section));
 
         for (SectionDto.ReorderItem item : request.getItems()) {
             SectionEntity section = byId.get(item.getSectionId());
@@ -140,9 +141,6 @@ public class SectionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Section Name is required.");
         }
         int wordCount = name.split("\\s+").length;
-        if (wordCount < 3) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Section Name must be at least 3 words.");
-        }
         if (wordCount > 100) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Section Name must not exceed 100 words.");
         }
