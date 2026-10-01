@@ -61,6 +61,13 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("You are not authorized to perform this action."));
     }
 
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleRateLimitExceeded(
+            RateLimitExceededException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
     @ExceptionHandler(CourseCreationException.class)
     public ResponseEntity<ApiResponse<Void>> handleCourseCreationFailure(
             CourseCreationException ex) {

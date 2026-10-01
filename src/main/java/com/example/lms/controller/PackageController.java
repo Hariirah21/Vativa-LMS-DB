@@ -1,6 +1,7 @@
 package com.example.lms.controller;
 
 import com.example.lms.dto.ApiResponse;
+import com.example.lms.dto.PackageAssignmentDto;
 import com.example.lms.dto.PackageDto;
 import com.example.lms.service.PackageService;   
 import jakarta.validation.Valid;
@@ -24,9 +25,10 @@ public class PackageController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<PackageDto.Response>> create(
-            @Valid @RequestBody PackageDto.Request request) {
+            @Valid @RequestBody PackageDto.Request request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
-                "Package created successfully.", packageService.createPackage(request)));
+                "Package created successfully.", packageService.createPackage(request, idempotencyKey)));
     }
 
     @PutMapping("/{id}")
@@ -52,5 +54,12 @@ public class PackageController {
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
         packageService.deletePackage(id);
         return ResponseEntity.ok(ApiResponse.success("Package deleted successfully."));
+    }
+
+    @PostMapping("/assign")
+    public ResponseEntity<ApiResponse<Void>> assign(
+            @Valid @RequestBody PackageAssignmentDto request) {
+        packageService.assignPackageToUser(request);
+        return ResponseEntity.ok(ApiResponse.success("Package assigned successfully."));
     }
 }

@@ -8,10 +8,13 @@ import com.example.lms.repository.LoginActivityRepository;
 import com.example.lms.repository.UserRepository;
 import com.example.lms.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
 
 /**
  * Business logic for 02__US_Login.
@@ -33,20 +36,36 @@ public class LoginService {
     private final JwtUtil jwtUtil;
     private final LoginActivityRepository loginActivityRepository;
 
-    @Transactional
+    @Value("${app.login.max-failed-attempts:5}")
+    private int maxFailedAttempts;
+
+    @Value("${app.login.lockout-minutes:15}")
+    private int lockoutMinutes;
+
+    @Transactional(noRollbackFor = ApiException.class)
     public LoginDto.LoginResponse login(LoginDto.LoginRequest request) {
         try {
             String email = request.getEmail().trim();
             User user = userRepository.findByEmailIgnoreCase(email)
                     .orElseThrow(() -> new ApiException("Invalid Email ID or Password.", HttpStatus.UNAUTHORIZED));
 
+            if (user.isLocked()) {
+                throw new ApiException(
+                        "Too many failed login attempts. Please try again after "
+                                + lockoutMinutes + " minutes.",
+                        HttpStatus.LOCKED);
+            }
+
             if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+                registerFailedAttempt(user);
                 throw new ApiException("Invalid Email ID or Password.", HttpStatus.UNAUTHORIZED);
             }
 
             if (!Boolean.TRUE.equals(user.getActive())) {
                 throw new ApiException("Your account is inactive. Please contact support.", HttpStatus.FORBIDDEN);
             }
+
+            resetFailedAttempts(user);
 
             boolean rememberMe = Boolean.TRUE.equals(request.getRememberMe());
             String role = normalizeRole(user.getRole());
@@ -85,5 +104,24 @@ public class LoginService {
             return "SUPER_ADMIN";
         }
         return normalized.startsWith("ROLE_") ? normalized.substring(5) : normalized;
+    }
+
+    private void registerFailedAttempt(User user) {
+        int attempts = user.getFailedLoginAttempts() == null
+                ? 1 : user.getFailedLoginAttempts() + 1;
+        user.setFailedLoginAttempts(attempts);
+        if (attempts >= maxFailedAttempts) {
+            user.setLockedUntil(LocalDateTime.now().plusMinutes(lockoutMinutes));
+        }
+        userRepository.save(user);
+    }
+
+    private void resetFailedAttempts(User user) {
+        if ((user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() > 0)
+                || user.getLockedUntil() != null) {
+            user.setFailedLoginAttempts(0);
+            user.setLockedUntil(null);
+            userRepository.save(user);
+        }
     }
 }

@@ -69,6 +69,16 @@ public class JwtUtil {
                 .get("role");
     }
 
+    public Long extractUserId(String token) {
+        Object userId = Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .get("userId");
+        return userId == null ? null : Long.valueOf(userId.toString());
+    }
+
     public LocalDateTime extractExpirationDateTime(String token) {
         Date expiration = Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())

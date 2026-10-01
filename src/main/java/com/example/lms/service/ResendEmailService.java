@@ -20,7 +20,7 @@ import java.util.Map;
  */
 @Slf4j
 @Service
-public class ResendEmailService {
+public class ResendEmailService implements PasswordResetEmailService {
 
     @Value("${resend.api-key}")
     private String apiKey;
@@ -38,6 +38,7 @@ public class ResendEmailService {
         return WebClient.builder().baseUrl(baseUrl).build();
     }
 
+    @Override
     public void sendResetLinkEmail(String toEmail, String resetLink, int expiryMinutes) {
         String subject = "Reset your LMS password";
         String html = buildResetLinkHtml(resetLink, expiryMinutes);

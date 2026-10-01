@@ -39,6 +39,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = authHeader.substring(7);
 
             if (jwtUtil.isTokenValid(token)) {
+                Long userId = jwtUtil.extractUserId(token);
                 String email = jwtUtil.extractEmail(token);
                 String role = jwtUtil.extractRole(token);
 
@@ -48,7 +49,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 var authorities = List.of(
                         new org.springframework.security.core.authority.SimpleGrantedAuthority(authority));
 
-                var authToken = new UsernamePasswordAuthenticationToken(email, null, authorities);
+                var principal = new AuthPrincipal(userId, email, normalizedRole);
+                var authToken = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }
         }

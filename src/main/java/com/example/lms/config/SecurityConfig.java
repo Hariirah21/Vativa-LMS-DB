@@ -1,5 +1,6 @@
 package com.example.lms.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,6 +23,11 @@ import org.springframework.http.MediaType;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    @Bean
+    public ObjectMapper legacyObjectMapper() {
+        return new ObjectMapper();
+    }
+
     // Required by SignUpService / LoginService (constructor-injected) to
     // hash and verify passwords with BCrypt.
     @Bean
@@ -30,7 +36,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           JwtAuthenticationFilter jwtAuthenticationFilter,
+                                           RateLimitingFilter rateLimitingFilter) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
@@ -83,7 +91,8 @@ public class SecurityConfig {
                 // Wires JwtAuthenticationFilter into the chain - without this,
                 // JwtUtil is never invoked on incoming requests and every
                 // protected endpoint 401s even with a valid token.
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(jwtAuthenticationFilter, RateLimitingFilter.class);
         return http.build();
     }
 }

@@ -75,33 +75,33 @@ class StaffControllerIntegrationTests {
         mockMvc.perform(get("/api/roles")
                         .with(user("admin@example.com").roles("ADMIN")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(0)));
+                .andExpect(jsonPath("$.data", hasSize(0)));
 
         String createdResponse = mockMvc.perform(post("/api/roles")
                         .with(user("admin@example.com").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(roleBody("Course Reviewer")))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.name").value("Course Reviewer"))
+                .andExpect(jsonPath("$.data.name").value("Course Reviewer"))
                 .andReturn().getResponse().getContentAsString();
-        long roleId = objectMapper.readTree(createdResponse).get("id").asLong();
+        long roleId = objectMapper.readTree(createdResponse).get("data").get("id").asLong();
 
         mockMvc.perform(get("/api/roles").with(user("admin@example.com").roles("ADMIN")))
-                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].name").value("Course Reviewer"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].name").value("Course Reviewer"));
 
         mockMvc.perform(put("/api/roles/{id}", roleId)
                         .with(user("admin@example.com").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(roleBody("Senior Course Reviewer")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Senior Course Reviewer"));
+                .andExpect(jsonPath("$.data.name").value("Senior Course Reviewer"));
 
         mockMvc.perform(delete("/api/roles/{id}", roleId)
                         .with(user("admin@example.com").roles("ADMIN")))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk());
         mockMvc.perform(get("/api/roles").with(user("admin@example.com").roles("ADMIN")))
-                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data", hasSize(0)));
     }
 
     @Test
@@ -109,7 +109,7 @@ class StaffControllerIntegrationTests {
         mockMvc.perform(get("/api/application-modules")
                         .with(user("admin@example.com").roles("ADMIN")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].name", hasItems(
+                .andExpect(jsonPath("$.data[*].name", hasItems(
                         "Authentication",
                         "Course Management",
                         "Content Management",
@@ -125,13 +125,13 @@ class StaffControllerIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createBody))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(registeredUser.getId()))
-                .andExpect(jsonPath("$.username").value("Jane Doe"))
-                .andExpect(jsonPath("$.role").value("Instructor"))
-                .andExpect(jsonPath("$.status").value("Active"))
+                .andExpect(jsonPath("$.data.id").value(registeredUser.getId()))
+                .andExpect(jsonPath("$.data.username").value("Jane Doe"))
+                .andExpect(jsonPath("$.data.role").value("Instructor"))
+                .andExpect(jsonPath("$.data.status").value("Active"))
                 .andReturn().getResponse().getContentAsString();
 
-        JsonNode created = objectMapper.readTree(createResponse);
+        JsonNode created = objectMapper.readTree(createResponse).get("data");
         long userId = created.get("id").asLong();
         assertThat(roleRepository.existsByNameIgnoreCaseAndCreatedByAdminId(
                 "Instructor",
@@ -141,7 +141,7 @@ class StaffControllerIntegrationTests {
         mockMvc.perform(get("/api/staff")
                         .with(user("admin@example.com").roles("ADMIN")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].email").value("jane@example.com"));
+                .andExpect(jsonPath("$.data[0].email").value("jane@example.com"));
 
         mockMvc.perform(put("/api/staff/{id}", userId)
                         .with(user("admin@example.com").roles("ADMIN"))
@@ -151,14 +151,14 @@ class StaffControllerIntegrationTests {
                                 "jane@example.com",
                                 "Content Manager")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.role").value("Content Manager"));
+                .andExpect(jsonPath("$.data.role").value("Content Manager"));
 
         assertThat(userRepository.findById(userId).orElseThrow().getRole())
                 .isEqualTo("Content Manager");
 
         mockMvc.perform(delete("/api/staff/{id}", userId)
                         .with(user("admin@example.com").roles("ADMIN")))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk());
 
         assertThat(userRepository.findById(userId).orElseThrow().getActive()).isFalse();
     }

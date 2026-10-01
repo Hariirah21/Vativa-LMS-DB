@@ -36,4 +36,5 @@ build/
 .history/
 uploads/
 local-data/
+data/
 backend-*.log

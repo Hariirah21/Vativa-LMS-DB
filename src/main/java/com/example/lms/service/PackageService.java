@@ -1,28 +1,47 @@
 package com.example.lms.service;
 
+import com.example.lms.dto.PackageAssignmentDto;
 import com.example.lms.dto.PackageDto;
 import com.example.lms.entity.PackageEntity;
+import com.example.lms.entity.User;
+import com.example.lms.exception.ApiException;
+import com.example.lms.exception.RateLimitExceededException;
 import com.example.lms.repository.PackageRepository;
+import com.example.lms.repository.UserRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
 public class PackageService {
 
     private final PackageRepository packageRepository;
+    private final UserRepository userRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ConcurrentHashMap<String, Instant> recentSubmissions = new ConcurrentHashMap<>();
+    private static final Duration DUPLICATE_SUBMIT_WINDOW = Duration.ofSeconds(5);
 
-    public PackageService(PackageRepository packageRepository) {
+    public PackageService(PackageRepository packageRepository, UserRepository userRepository) {
         this.packageRepository = packageRepository;
+        this.userRepository = userRepository;
     }
 
     @Transactional
     public PackageDto.Response createPackage(PackageDto.Request request) {
+        return createPackage(request, null);
+    }
+
+    @Transactional
+    public PackageDto.Response createPackage(PackageDto.Request request, String idempotencyKey) {
+        guardAgainstDuplicateSubmit(idempotencyKey);
         if (packageRepository.existsByNameIgnoreCase(request.getName())) {
             throw new IllegalArgumentException("A package with the same name already exists");
         }
@@ -58,9 +77,37 @@ public class PackageService {
         if (!packageRepository.existsById(id)) {
             throw new IllegalArgumentException("Package not found");
         }
-        // Business rule pending: check if the package is assigned to an Admin before deleting
-        // (SRS Edge Case — "package is in use")
+        if (userRepository.existsByPackageId(id)) {
+            throw new ApiException(
+                    "This package is currently in use and cannot be deleted",
+                    HttpStatus.CONFLICT);
+        }
         packageRepository.deleteById(id);
+    }
+
+    @Transactional
+    public void assignPackageToUser(PackageAssignmentDto request) {
+        PackageEntity packageEntity = packageRepository.findById(request.getPackageId())
+                .orElseThrow(() -> new ApiException("Package not found", HttpStatus.NOT_FOUND));
+        User user = userRepository.findByEmailIgnoreCase(request.getEmailId())
+                .orElseThrow(() -> new ApiException(
+                        "Please select a registered Email ID", HttpStatus.BAD_REQUEST));
+        user.setPackageId(packageEntity.getId());
+        user.setPackageAssignedAt(java.time.LocalDateTime.now());
+        userRepository.save(user);
+    }
+
+    private void guardAgainstDuplicateSubmit(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return;
+        }
+        Instant now = Instant.now();
+        recentSubmissions.entrySet().removeIf(entry ->
+                Duration.between(entry.getValue(), now).compareTo(DUPLICATE_SUBMIT_WINDOW) > 0);
+        if (recentSubmissions.putIfAbsent(idempotencyKey.trim(), now) != null) {
+            throw new RateLimitExceededException(
+                    "This request is already being processed. Please wait a moment before retrying.");
+        }
     }
 
     private void mapRequestToEntity(PackageDto.Request request, PackageEntity entity) {

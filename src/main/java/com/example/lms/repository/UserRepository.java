@@ -1,7 +1,9 @@
 package com.example.lms.repository;
 
 import com.example.lms.entity.User;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -11,9 +13,19 @@ import java.time.LocalDateTime;
 
 public interface UserRepository extends JpaRepository<User, Long> {
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT user FROM User user WHERE user.id = :userId")
+    Optional<User> findByIdForQuestionBankCreation(@Param("userId") Long userId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT user FROM User user WHERE user.id = :userId")
+    Optional<User> findByIdForUpdate(@Param("userId") Long userId);
+
     Optional<User> findByEmailIgnoreCase(String email);
 
     boolean existsByEmailIgnoreCase(String email);
+
+    boolean existsByPackageId(Long packageId);
 
     @Query("""
             select user

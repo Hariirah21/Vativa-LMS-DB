@@ -59,6 +59,23 @@ public class User {
     @Builder.Default
     private Boolean active = true;
 
+    @Column(name = "package_id")
+    private Long packageId;
+
+    @Column(name = "package_assigned_at")
+    private LocalDateTime packageAssignedAt;
+
+    @Column(name = "package_expires_at")
+    private LocalDateTime packageExpiresAt;
+
+    @Column(name = "failed_login_attempts", nullable = false,
+            columnDefinition = "integer not null default 0")
+    @Builder.Default
+    private Integer failedLoginAttempts = 0;
+
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -72,10 +89,23 @@ public class User {
         if (this.role == null) {
             this.role = "ADMIN";
         }
+        if (this.failedLoginAttempts == null) {
+            this.failedLoginAttempts = 0;
+        }
     }
 
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    @Transient
+    public boolean isLocked() {
+        return lockedUntil != null && LocalDateTime.now().isBefore(lockedUntil);
+    }
+
+    @Transient
+    public boolean isPackageExpired() {
+        return packageExpiresAt != null && LocalDateTime.now().isAfter(packageExpiresAt);
     }
 }
